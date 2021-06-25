@@ -165,8 +165,9 @@ void job_threads::workerStart_write()
     {
         job_struct* job = getJob_w();
         if(job!=NULL){
-            this_pman->insertNT(job->key,job->key_length,job->value,job->value_length,job->offset);
             job->status=true;
+            this_pman->insertNT(job->key,job->key_length,job->value,job->value_length,job->offset);
+            delete job;
         }
     }
 }

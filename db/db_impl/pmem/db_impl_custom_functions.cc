@@ -55,14 +55,15 @@ void DBImpl::load_wisckey(bool new_old){
 }
 
 string DBImpl::put_custom(const char *key, u_short key_length, const char *value, u_short value_length){
-    job_struct js;
-    js.key=key;
-    js.key_length=key_length;
-    js.value=value;
-    js.value_length=value_length;
-    jt.addWork_write(&js);
-    while(!js.status){cout<<"";}; // Wait until the job is done
-    return string((char*)&js.offset,8); // The size of a long is 8 byte.
+    job_struct *js=new job_struct();
+    js->key=key;
+    js->key_length=key_length;
+    js->value=value;
+    js->value_length=value_length;
+    js->status=false;
+    jt.addWork_write(js);
+    while(!js->status){cout<<"";}; // Wait until the job is done
+    return string((char*)&js->offset,8); // The size of a long is 8 byte.
 }
 
 string DBImpl::get_custom(const char *string_offset){
