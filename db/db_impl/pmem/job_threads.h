@@ -39,7 +39,7 @@ class job_threads
 
         void addWork_write(job_struct *job);
         void addWork_read(job_pointer *job);
-        void workerStart_write(u_short &threadID);
+        void workerStart_write();
         void workerStart_read();
         int init(u_short threadCount_write, u_short threadCount_read, pmem_manager *pman);
 

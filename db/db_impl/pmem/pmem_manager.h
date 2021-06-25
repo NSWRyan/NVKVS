@@ -77,7 +77,6 @@ class pmem_manager{
 	struct pmem2_config *cfg;
 	struct pmem2_map *map;
 	struct pmem2_source *src;
-    pmem2_persist_fn persist_fn;
     size_t pmem_size;
     char *pmem_addr;
     u_short thread_number;
@@ -88,6 +87,7 @@ class pmem_manager{
     int close_pmem();
 
     public:
+    pmem2_persist_fn persist_fn;
     long* offsets; 
     pmem_manager();
     ~pmem_manager();
@@ -101,11 +101,11 @@ class pmem_manager{
     long max_write;
 
     // The definition for the current files
-    vector<offset_helper> current_offset;
+    offset_helper current_offset;
 
  
     long insertST(string key, u_short key_length, string value, u_short value_length);
-    long insertNT(const char* key, u_short key_length, const char* value, u_short value_length, u_short thread_ID);
+    void insertNT(const char* key, u_short key_length, const char* value, u_short value_length, long write_offset);
     // int readST(long offset, job_struct &the_job); Deprecated
     int readSTNC(job_pointer *the_job);
 };

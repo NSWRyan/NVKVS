@@ -159,13 +159,13 @@ void job_threads::addWork_read(job_pointer *job)
 }
 
 // This is the main worker loop for write.
-void job_threads::workerStart_write(u_short &threadID)
+void job_threads::workerStart_write()
 {
     while(!finished)
     {
         job_struct* job = getJob_w();
         if(job!=NULL){
-            job->offset=this_pman->insertNT(job->key,job->key_length,job->value,job->value_length,threadID);
+            this_pman->insertNT(job->key,job->key_length,job->value,job->value_length,job->offset);
             job->status=true;
         }
     }
@@ -213,6 +213,14 @@ job_struct* job_threads::getJob_w()
     if (!finished)
     {    result=(workQueue_w.front());
          workQueue_w.pop_front();
+
+        // Increment the thread offset
+        // struture of each write key_length | value_length | key | value
+        result->offset=this_pman->current_offset.offset_current;
+        this_pman->current_offset.offset_current += 4
+            + result->key_length
+            + result->value_length;
+        this_pman->offsets[2]=this_pman->current_offset.offset_current;
     }
     return result;
 }
@@ -258,9 +266,8 @@ void* threadPoolThreadStart(void* data)
     try
     {
         if(ps->writer){
-            u_short threadID=ps->threadID;
             //cout<<"Write Thread started "<<threadID<<endl;
-            jt->workerStart_write(threadID);
+            jt->workerStart_write();
         }else{
             //cout<<"Read Thread started "<<threadID<<endl;
             jt->workerStart_read();

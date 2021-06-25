@@ -60,6 +60,8 @@ int pmem_manager::open_pmem(u_short nThread, bool start_new){
 
 // Clear all of the mappings
 int pmem_manager::close_pmem(){
+    // Update the offset and persist it.
+    persist_fn(offsets+(8*(2)),8);
     pmem2_map_delete(&map);
     pmem2_source_delete(&src);
     pmem2_config_delete(&cfg);
@@ -82,16 +84,15 @@ int pmem_manager::init_pmem(u_short nThread){
     // Offset sizes (3 longs)
     total_write+=nThread*8*3;
     // Size for each partition, -1 is to ensure that no overcapacity writes
-    max_write=(pmem_size-total_write-1)/nThread;
-    for(long i=0; i<nThread;i++){
-        // + 3 is for the offset shift
-        // Offset start
-        offsets[0+i*3]=total_write+i*max_write;
-        // Last GC pos
-        offsets[1+i*3]=total_write+i*max_write;
-        // Last write continue offset
-        offsets[2+i*3]=total_write+i*max_write;
-    }
+    max_write=(pmem_size-total_write-1);
+    // The start position
+    offsets[0]=total_write;
+    // The last GC pos
+    offsets[1]=total_write;
+    // The last write pos
+    offsets[2]=total_write;
+    // The max write
+    offsets[3]=total_write+max_write;
     // Now persist the header
     persist_fn(pmem_addr,total_write);
     offset=0;
@@ -117,18 +118,16 @@ int pmem_manager::load_header(u_short nThread){
     offsets=(long*)(pmem_addr+3);
 
     // Now fill in the offset_helper for each threads.
-    current_offset.resize(nThread);
-    for (int i=0;i<nThread;i++){
-        // The start position
-        current_offset[i].offset_start=offsets[0+i*3];
-        // The last GC pos
-        current_offset[i].offset_gc=offsets[1+i*3];
-        // The last write pos
-        current_offset[i].offset_current=offsets[2+i*3];
-        // The max write
-        current_offset[i].offset_max=current_offset[i].offset_start+max_write-1;
-        //cout<<"T"<<i<<" offset start "<<current_offset[i].offset_current<<" stop "<< current_offset[i].offset_max<<endl;
-    }
+    // The start position
+    current_offset.offset_start=offsets[0];
+    // The last GC pos
+    current_offset.offset_gc=offsets[1];
+    // The last write pos
+    current_offset.offset_current=offsets[2];
+    // The max write
+    current_offset.offset_max=current_offset.offset_start+max_write-1;
+    //cout<<"T"<<i<<" offset start "<<current_offset[i].offset_current<<" stop "<< current_offset[i].offset_max<<endl;
+
     return return_val;
 }
 
@@ -153,27 +152,16 @@ long pmem_manager::insertST(string key, u_short key_length, string value, u_shor
     return original_offset;
 }
 
-long pmem_manager::insertNT(const char* key, u_short key_length, const char* value, u_short value_length, u_short thread_ID){
-    // Lock the current write offset
-    long original_offset = current_offset[thread_ID].offset_current;
-
-    // Increment the thread offset
-    // struture of each write key_length | value_length | key | value
-    current_offset[thread_ID].offset_current+=4+key_length+value_length;
-    // Update the offset and persist it.
-    offsets[2+thread_ID*3]=current_offset[thread_ID].offset_current;
-    persist_fn(offsets+(8*(2+thread_ID*3)),8);
-    
+void pmem_manager::insertNT(const char* key, u_short key_length, const char* value, u_short value_length, long write_offset){
     //Write and persist key and value length
-    memcpy(pmem_addr+original_offset,&key_length,2);
-    memcpy(pmem_addr+original_offset+2,&value_length,2);
+    memcpy(pmem_addr+write_offset,&key_length,2);
+    memcpy(pmem_addr+write_offset+2,&value_length,2);
 
-    //Write and persist key and value
-    memcpy(pmem_addr+original_offset+4,key,  key_length);
-    memcpy(pmem_addr+original_offset+4+key_length,value, value_length);
+    // Write and persist key and value
+    memcpy(pmem_addr+write_offset+4,key,  key_length);
+    memcpy(pmem_addr+write_offset+4+key_length,value, value_length);
 
-    persist_fn(pmem_addr+original_offset,4+key_length+value_length);
-    return original_offset;
+    persist_fn(pmem_addr+write_offset,4+key_length+value_length);
 }
 
 /* Deprecated
