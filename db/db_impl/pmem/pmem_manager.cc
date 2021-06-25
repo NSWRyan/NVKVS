@@ -61,7 +61,7 @@ int pmem_manager::open_pmem(u_short nThread, bool start_new){
 // Clear all of the mappings
 int pmem_manager::close_pmem(){
     // Update the offset and persist it.
-    persist_fn(offsets+(8*(2)),8);
+    persist_fn(offsets+3,8*4);
     pmem2_map_delete(&map);
     pmem2_source_delete(&src);
     pmem2_config_delete(&cfg);
@@ -82,7 +82,7 @@ int pmem_manager::init_pmem(u_short nThread){
     // Total write + 2 bytes;
     offsets=(long*)(pmem_addr+3);
     // Offset sizes (3 longs)
-    total_write+=nThread*8*3;
+    total_write+=nThread*8*4;
     // Size for each partition, -1 is to ensure that no overcapacity writes
     max_write=(pmem_size-total_write-1);
     // The start position
