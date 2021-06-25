@@ -165,7 +165,7 @@ void job_threads::workerStart_write(u_short &threadID)
     {
         job_struct* job = getJob_w();
         if(job!=NULL){
-            job->offset=this_pman->insertNT(job->key,job->key_length,job->value,job->value_length,threadID);
+            this_pman->insertNT(job->key,job->key_length,job->value,job->value_length,threadID);
             job->status=true;
         }
     }
@@ -258,8 +258,8 @@ void* threadPoolThreadStart(void* data)
     try
     {
         if(ps->writer){
-            u_short threadID=ps->threadID;
             //cout<<"Write Thread started "<<threadID<<endl;
+            u_short threadID=ps->threadID;
             jt->workerStart_write(threadID);
         }else{
             //cout<<"Read Thread started "<<threadID<<endl;
