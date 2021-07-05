@@ -83,6 +83,17 @@ int wk_job_threads::init(u_short threadCount_write, u_short threadCount_read, wk
 wk_job_threads::~wk_job_threads()
 {   
     if(initiated){
+        while(workQueue_w.size()!=0){
+            // Wait till job is done
+            cout<<"";
+        }
+        while(workQueue_r.size()!=0){
+            // Wait till job is done
+            cout<<"";
+        }
+        if(!this_wkman->closed){
+            this_wkman->closed=true;
+        }
         //////////////////////////////////////////////////////////////////////////
         // Write part
         //////////////////////////////////////////////////////////////////////////

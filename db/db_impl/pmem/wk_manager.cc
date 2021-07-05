@@ -17,6 +17,7 @@ int wk_manager::open(u_short nThreadRead, u_short nThread, bool new_old){
     }
     load(nThread);
     initiated=true;
+    closed=false;
     return 0;
 }
 
@@ -79,9 +80,9 @@ int wk_manager::load(u_short nThread){
             wkoffsets[i].ilog_file.read((char *)&wkoffsets[i].o_h.offset_gc,sizeof(long));
             wkoffsets[i].ilog_file.read((char *)&wkoffsets[i].o_h.offset_max,sizeof(long));
             wkoffsets[i].ilog_file.read((char *)&wkoffsets[i].o_h.offset_start,sizeof(long));
+            wkoffsets[i].ilog_file.close();
         }
-        
-        
+        wkoffsets[i].done=true;
     }
 
     rh.resize(this_nThreadR);
@@ -97,14 +98,23 @@ int wk_manager::load(u_short nThread){
 }
 
 int wk_manager::close(){
+    // Wait the worker threads to be closed first.
+    while(!closed){
+        cout<<"";
+    }
     for(int i=0;i<this_nThread;i++){
-        if(wkoffsets[i].ilog_file.is_open()){
-            wkoffsets[i].ilog_file.close();
+        // Wait till the write is done
+        while (!wkoffsets[i].done){
+            cout<<"";
         }
+        // Now close the files
         if(wkoffsets[i].olog_file.is_open()){
             wkoffsets[i].olog_file.flush();
             wkoffsets[i].olog_file.close();
         }
+        
+    }
+    for(int i=0;i<this_nThreadR;i++){
         for(int i2=0;i2<this_nThread;i2++){
             rh[i].file_ifstreams[i2].close();
         }
@@ -114,7 +124,7 @@ int wk_manager::close(){
 
 long wk_manager::insertNT(const char* key, u_short key_length, const char* value, u_short value_length, u_short thread_ID){
     long original_offset = wkoffsets[thread_ID].o_h.offset_current;
-
+    wkoffsets[thread_ID].done=false;
     // Increment the thread offset
     // struture of each write key_length | value_length | key | value
     wkoffsets[thread_ID].o_h.offset_current+=4+key_length+value_length;
@@ -132,6 +142,7 @@ long wk_manager::insertNT(const char* key, u_short key_length, const char* value
     wkoffsets[thread_ID].olog_file.write(key,key_length);
     wkoffsets[thread_ID].olog_file.write(value,value_length);
     wkoffsets[thread_ID].olog_file.flush();
+    wkoffsets[thread_ID].done=true;
     return original_offset;
 }
 

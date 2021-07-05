@@ -83,6 +83,14 @@ int job_threads::init(u_short threadCount_write, u_short threadCount_read, pmem_
 job_threads::~job_threads()
 {
     if(initiated){
+        while(workQueue_w.size()!=0){
+            // Wait till job is done
+            cout<<"";
+        }
+        while(workQueue_r.size()!=0){
+            // Wait till job is done
+            cout<<"";
+        }
         //////////////////////////////////////////////////////////////////////////
         // Write part
         //////////////////////////////////////////////////////////////////////////

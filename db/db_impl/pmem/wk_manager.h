@@ -33,6 +33,7 @@ struct wk_offset_helper{
     struct offset_helper o_h;
     fstream olog_file;
     ifstream ilog_file;
+    bool done;
 };
 
 struct read_thread_helper{
@@ -40,12 +41,13 @@ struct read_thread_helper{
 };
 
 class wk_manager{
-    vector<wk_offset_helper> wkoffsets;
-    vector<read_thread_helper> rh;
-    u_short this_nThread;
-    u_short this_nThreadR;
     bool initiated;
     public:
+    bool closed;
+    u_short this_nThread;
+    u_short this_nThreadR;
+    vector<wk_offset_helper> wkoffsets;
+    vector<read_thread_helper> rh;
     wk_manager();
     ~wk_manager();
     int open(u_short nThreadRead, u_short nThread, bool new_old);
