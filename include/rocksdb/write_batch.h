@@ -58,6 +58,17 @@ struct SavePoint {
   bool is_cleared() const { return (size | count | content_flags) == 0; }
 };
 
+struct job_struct{
+    const char *key;
+    const char *value;
+    u_short key_length;
+    u_short value_length;
+    long offset;
+    bool status;
+    u_short threadID;
+    job_struct2():key_length(0),value_length(0),status(false){};
+};
+
 class WriteBatch : public WriteBatchBase {
  public:
   explicit WriteBatch(size_t reserved_bytes = 0, size_t max_bytes = 0);

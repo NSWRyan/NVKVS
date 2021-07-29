@@ -53,6 +53,7 @@
 #include "rocksdb/trace_reader_writer.h"
 #include "rocksdb/transaction_log.h"
 #include "rocksdb/write_buffer_manager.h"
+#include "rocksdb/write_batch.h"
 #include "table/scoped_arena_iterator.h"
 #include "trace_replay/block_cache_tracer.h"
 #include "trace_replay/io_tracer.h"
@@ -144,6 +145,7 @@ class DBImpl : public DB {
   //Plasta
   // The pmem_manager
   pmem_manager pman;
+  job_struct2 asd;
 
   // The job manager for separated key value
   job_threads jt;
