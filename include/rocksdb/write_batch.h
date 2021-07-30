@@ -66,7 +66,7 @@ struct job_struct{
     long offset;
     bool status;
     u_short threadID;
-    job_struct2():key_length(0),value_length(0),status(false){};
+    job_struct():key_length(0),value_length(0),status(false){};
 };
 
 class WriteBatch : public WriteBatchBase {

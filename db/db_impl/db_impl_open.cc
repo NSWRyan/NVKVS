@@ -656,13 +656,8 @@ Status DBImpl::Recover(
       versions_->options_file_number_ = options_file_number;
     }
   }
-  load_pmem_wk();
-  if(pmem){
   // Plasta init the PMEM here
-    load_pmem(is_new_db);
-  }else{
-    load_wisckey(is_new_db);
-  }
+  load_pmem(is_new_db);
   return s;
 }
 

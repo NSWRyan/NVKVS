@@ -66,7 +66,7 @@
 
 #ifndef custom_pmem
 #define custom_pmem
-#include "db/db_impl/pmem/wk_job_threads.h"
+#include "db/db_impl/pmem/job_threads.h"
 #endif
 
 namespace ROCKSDB_NAMESPACE {
@@ -145,7 +145,6 @@ class DBImpl : public DB {
   //Plasta
   // The pmem_manager
   pmem_manager pman;
-  job_struct2 asd;
 
   // The job manager for separated key value
   job_threads jt;
@@ -154,28 +153,19 @@ class DBImpl : public DB {
   u_short nThreadWrite=5;
   u_short nThreadRead=5;
 
-  // PMEM or SSD (Wisckey)
+  // PMEM
   bool pmem;
-
-  // WiscKey
-  wk_manager wkman;
-  wk_job_threads wk_jt;
 
   virtual ~DBImpl();
 
   // ---- Implementations of the DB interface ----
 
   // Plasta functions
-  void load_pmem_wk();
+  void load_pmem_first();
   Slice get_iter(const char *string_offset);
   string put_custom(const char *key, u_short key_length, const char *value, u_short value_length);
   string get_custom(const char *string_offset);
   void load_pmem(bool new_old);
-
-  // WiscKey implementation
-  string put_custom_wk(const char *key, u_short key_length, const char *value, u_short value_length);
-  string get_custom_wk(const char *string_offset);
-  void load_wisckey(bool new_old);
 
   using DB::Resume;
   virtual Status Resume() override;

@@ -21,13 +21,8 @@ namespace ROCKSDB_NAMESPACE {
 Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
                    const Slice& key, const Slice& val) {
   //@PLASTA
-  if(pmem){
-    return DB::Put(o, column_family, key, 
-      put_custom(key.data(),key.size(),val.data(),val.size()));
-  }else{
-    return DB::Put(o, column_family, key, 
-      put_custom_wk(key.data(),key.size(),val.data(),val.size()));
-  }
+  return DB::Put(o, column_family, key, 
+    put_custom(key.data(),key.size(),val.data(),val.size()));
   // Original
   return DB::Put(o, column_family, key, val);
 }

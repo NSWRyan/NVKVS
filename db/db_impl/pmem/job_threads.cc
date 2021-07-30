@@ -115,7 +115,7 @@ job_threads::~job_threads()
 
         // Delete all re-maining jobs.
         // Notice how we took ownership of the jobs.
-        for(std::list<job_struct*>::const_iterator loop = workQueue_w.begin(); loop != workQueue_w.end();++loop)
+        for(std::list<rocksdb::job_struct*>::const_iterator loop = workQueue_w.begin(); loop != workQueue_w.end();++loop)
         {
             delete *loop;
         }
@@ -152,7 +152,7 @@ job_threads::~job_threads()
 // Add a new job to the queue
 // Signal the condition variable. This will flush a waiting worker
 // otherwise the job will wait for a worker to finish processing its current job.
-void job_threads::addWork_write(job_struct *job)
+void job_threads::addWork_write(rocksdb::job_struct *job)
 {
     MutexLock  lock(mutex_w);
     workQueue_w.push_back(job);
@@ -171,7 +171,7 @@ void job_threads::workerStart_write()
 {
     while(!finished)
     {
-        job_struct* job = getJob_w();
+        rocksdb::job_struct* job = getJob_w();
         if(job!=NULL){
             job->status=true;
             this_pman->insertNT(job->key,job->key_length,job->value,job->value_length,job->offset);
@@ -194,7 +194,7 @@ void job_threads::workerStart_read()
 }
 
 // Get a new job for the write thread
-job_struct* job_threads::getJob_w()
+rocksdb::job_struct* job_threads::getJob_w()
 {
     MutexLock  lock(mutex_w);
 
@@ -218,7 +218,7 @@ job_struct* job_threads::getJob_w()
         //   it would try and remove an item from an empty queue. With a while it sees
         //   that the queue is empty and re-suspends on the condition variable above.
     }
-    job_struct*  result=NULL;
+    rocksdb::job_struct*  result=NULL;
     if (!finished)
     {    result=(workQueue_w.front());
          workQueue_w.pop_front();

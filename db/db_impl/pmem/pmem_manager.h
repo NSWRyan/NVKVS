@@ -23,20 +23,11 @@
 #include <unistd.h>
 #include <condition_variable>
 #include <mutex>
+#include "rocksdb/write_batch.h"
 
 using namespace std;
 
 // This is used for write
-struct job_struct{
-    const char *key;
-    const char *value;
-    u_short key_length;
-    u_short value_length;
-    long offset;
-    bool status;
-    u_short threadID;
-    job_struct():key_length(0),value_length(0),status(false){};
-};
 
 // Only for WiscKey read
 struct job_struct_read{

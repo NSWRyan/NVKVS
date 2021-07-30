@@ -1,9 +1,7 @@
 # These are the sources from which librocksdb.a is built:
 LIB_SOURCES =                                                   \
   db/db_impl/pmem/pmem_manager.cc                               \
-  db/db_impl/pmem/job_threads.cc                                \
-  db/db_impl/pmem/wk_manager.cc                                 \
-  db/db_impl/pmem/wk_job_threads.cc                             \
+  db/db_impl/pmem/job_threads.cc                                   \
   db/db_impl/pmem/db_impl_custom_functions.cc                   \
   cache/cache.cc                                                \
   cache/clock_cache.cc                                          \
