@@ -31,6 +31,7 @@
 #include <vector>
 #include "rocksdb/status.h"
 #include "rocksdb/write_batch_base.h"
+#include <iostream>
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -60,17 +61,33 @@ struct SavePoint {
 
 struct job_struct{
     const char *key;
-    const char *value;
     u_short key_length;
+    
+    const char *value;
     u_short value_length;
+    int total_length;
     long offset;
     bool status;
     u_short threadID;
-    job_struct():key_length(0),value_length(0),status(false){};
+    job_struct():key_length(0),value_length(0),total_length(0),status(false){};
+    job_struct(const char *i_key, u_short i_key_length, 
+    const char *i_value, u_short i_value_length):
+      key(i_key),key_length(i_key_length),
+      value(i_value),value_length(i_value_length),
+      total_length(4+i_key_length+i_value_length),status(false){};
 };
 
 class WriteBatch : public WriteBatchBase {
  public:
+  // Plasta
+  std::vector<job_struct*>* writebatch_data=new std::vector<job_struct*>();
+  bool wb_status=false;
+  bool pmem_init=false;
+  job_struct* result=NULL;
+  long total_write=0;
+  long offset_start=0;
+
+  // Original
   explicit WriteBatch(size_t reserved_bytes = 0, size_t max_bytes = 0);
   explicit WriteBatch(size_t reserved_bytes, size_t max_bytes, size_t ts_sz);
   ~WriteBatch() override;
@@ -80,15 +97,28 @@ class WriteBatch : public WriteBatchBase {
   Status Put(ColumnFamilyHandle* column_family, const Slice& key,
              const Slice& value) override;
   Status Put(const Slice& key, const Slice& value) override {
-    return Put(nullptr, key, value);
+    // Plasta
+    job_struct* js=new job_struct(key.data(),key.size(),value.data(),value.size());
+    total_write+=js->total_length;
+    writebatch_data->push_back(js);
+    
+    return Status::OK();
+    // Original
+    // return Put(nullptr, key, value);
   }
 
+  
   // Variant of Put() that gathers output like writev(2).  The key and value
   // that will be written to the database are concatenations of arrays of
   // slices.
   Status Put(ColumnFamilyHandle* column_family, const SliceParts& key,
              const SliceParts& value) override;
   Status Put(const SliceParts& key, const SliceParts& value) override {
+    return Put(nullptr, key, value);
+  }
+
+  using WriteBatchBase::Put2;
+  Status Put2(const Slice& key, const Slice& value) override {
     return Put(nullptr, key, value);
   }
 

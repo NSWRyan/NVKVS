@@ -39,6 +39,7 @@ class job_threads
         ~job_threads();
 
         void addWork_write(rocksdb::job_struct *job);
+        void addWork_write_batch(rocksdb::WriteBatch *job);
         void addWork_read(job_pointer *job);
         void workerStart_write();
         void workerStart_read();
@@ -52,7 +53,7 @@ class job_threads
         friend void* job_threads_Start(void*);
         bool initiated;
 
-        rocksdb::job_struct* getJob_w();
+        rocksdb::WriteBatch* getJob_w();
         job_pointer* getJob_r();
         pmem_manager *this_pman;
         bool                finished;   // Threads will re-wait while this is true.
@@ -61,6 +62,7 @@ class job_threads
         pthread_cond_t      cond_w;       // The condition variable that is used to hold worker threads.
         pthread_cond_t      cond_r;       // The condition variable that is used to hold worker threads.
         std::list<rocksdb::job_struct*>     workQueue_w;  // A queue of jobs.
+        std::list<rocksdb::WriteBatch*>     workQueue_w_batch;  // A queue of jobs.
         std::list<job_pointer*>     workQueue_r;  // A queue of jobs.
         std::vector<pthread_t>threads_write;
         std::vector<pthread_t>threads_read;

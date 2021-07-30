@@ -698,6 +698,15 @@ Status WriteBatchWithIndex::Put(const Slice& key, const Slice& value) {
   return s;
 }
 
+Status WriteBatchWithIndex::Put2(const Slice& key, const Slice& value) {
+  rep->SetLastEntryOffset();
+  auto s = rep->write_batch.Put2(key, value);
+  if (s.ok()) {
+    rep->AddOrUpdateIndex(key);
+  }
+  return s;
+}
+
 Status WriteBatchWithIndex::Delete(ColumnFamilyHandle* column_family,
                                    const Slice& key) {
   rep->SetLastEntryOffset();

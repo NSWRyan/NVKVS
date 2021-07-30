@@ -159,6 +159,13 @@ void job_threads::addWork_write(rocksdb::job_struct *job)
     pthread_cond_signal(&cond_w);
 }
 
+void job_threads::addWork_write_batch(rocksdb::WriteBatch *job)
+{
+    MutexLock  lock(mutex_w);
+    workQueue_w_batch.push_back(job);
+    pthread_cond_signal(&cond_w);
+}
+
 void job_threads::addWork_read(job_pointer *job)
 {
     MutexLock  lock(mutex_r);
@@ -171,11 +178,23 @@ void job_threads::workerStart_write()
 {
     while(!finished)
     {
-        rocksdb::job_struct* job = getJob_w();
+        rocksdb::WriteBatch* job = getJob_w();
         if(job!=NULL){
-            job->status=true;
-            this_pman->insertNT(job->key,job->key_length,job->value,job->value_length,job->offset);
-            delete job;
+            if(job->pmem_init){
+                this_pman->insertNT(job->result->key,job->result->key_length,job->result->value,job->result->value_length,job->result->offset);
+                delete(job->result);
+                delete(job);
+            }else{
+                long start_offset=job->offset_start;
+                int v_size=job->writebatch_data->size();
+                for(int i=0;i<v_size;i++){
+                    // Pipelined write
+                    rocksdb::job_struct* temp_js=job->writebatch_data->at(i);
+                    temp_js->offset=start_offset;
+                    this_pman->insertNT(temp_js->key,temp_js->key_length,temp_js->value,temp_js->value_length,temp_js->offset);
+                    start_offset+=temp_js->total_length;
+                }
+            }
         }
     }
 }
@@ -194,11 +213,11 @@ void job_threads::workerStart_read()
 }
 
 // Get a new job for the write thread
-rocksdb::job_struct* job_threads::getJob_w()
+rocksdb::WriteBatch* job_threads::getJob_w()
 {
     MutexLock  lock(mutex_w);
 
-    while((workQueue_w.empty()) && (!finished))
+    while((workQueue_w.empty())&& (workQueue_w_batch.empty()) && (!finished))
     {
         pthread_cond_wait(&cond_w, &mutex_w);
         // The wait releases the mutex lock and suspends the thread (until a signal).
@@ -218,20 +237,39 @@ rocksdb::job_struct* job_threads::getJob_w()
         //   it would try and remove an item from an empty queue. With a while it sees
         //   that the queue is empty and re-suspends on the condition variable above.
     }
-    rocksdb::job_struct*  result=NULL;
+    rocksdb::WriteBatch* wb_result=NULL;
     if (!finished)
-    {    result=(workQueue_w.front());
-         workQueue_w.pop_front();
+    {   
+        if(!workQueue_w_batch.empty()){
+            // Obtain the jobs
+            wb_result=workQueue_w_batch.front();
+            workQueue_w_batch.pop_front();
+            
+            // Offset management
+            wb_result->offset_start=this_pman->current_offset.offset_current;
+            this_pman->current_offset.offset_current += wb_result->total_write;
+            this_pman->offsets[2]=this_pman->current_offset.offset_current;
+            wb_result->wb_status=true;
+        }
+        else if(!workQueue_w.empty()){
+            rocksdb::job_struct* result=NULL;
+            result=(workQueue_w.front());
+            workQueue_w.pop_front();
 
-        // Increment the thread offset
-        // struture of each write key_length | value_length | key | value
-        result->offset=this_pman->current_offset.offset_current;
-        this_pman->current_offset.offset_current += 4
-            + result->key_length
-            + result->value_length;
-        this_pman->offsets[2]=this_pman->current_offset.offset_current;
+            // Increment the thread offset
+            // struture of each write key_length | value_length | key | value
+            result->offset=this_pman->current_offset.offset_current;
+            this_pman->current_offset.offset_current += 4
+                + result->key_length
+                + result->value_length;
+            this_pman->offsets[2]=this_pman->current_offset.offset_current;
+            wb_result=new rocksdb::WriteBatch();
+            wb_result->pmem_init=true;
+            wb_result->result=result;
+            result->status=true;
+        }
     }
-    return result;
+    return wb_result;
 }
 
 // Get a new job for the read thread

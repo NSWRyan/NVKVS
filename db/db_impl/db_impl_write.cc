@@ -21,10 +21,17 @@ namespace ROCKSDB_NAMESPACE {
 Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
                    const Slice& key, const Slice& val) {
   //@PLASTA
-  return DB::Put(o, column_family, key, 
-    put_custom(key.data(),key.size(),val.data(),val.size()));
+    // 8 byte is the offset length
+    WriteBatch batch(key.size() + 8 + 24);
+    Status s = batch.Put(column_family, key, put_custom(key.data(),key.size(),val.data(),val.size()));
+    if (!s.ok()) {
+      return s;
+    }
+    batch.pmem_init=true;
+
+    return Write(o, &batch);
   // Original
-  return DB::Put(o, column_family, key, val);
+  //return DB::Put(o, column_family, key, val);
 }
 
 Status DBImpl::Merge(const WriteOptions& o, ColumnFamilyHandle* column_family,
@@ -54,6 +61,19 @@ void DBImpl::SetRecoverableStatePreReleaseCallback(
 }
 
 Status DBImpl::Write(const WriteOptions& write_options, WriteBatch* my_batch) {
+  // PLASTA
+  if(!my_batch->pmem_init){
+    put_custom_wb(my_batch);
+    
+    // To do move the batch to from the vector back to batch
+    int v_size=my_batch->writebatch_data->size();
+    long this_offset=my_batch->offset_start;
+    for(int i=0;i<v_size;i++){
+      job_struct* temp_js=my_batch->writebatch_data->at(i);
+      my_batch->Put2(temp_js->key, string((char*)&(this_offset),8));
+      this_offset+=temp_js->total_length;
+    }
+  }
   return WriteImpl(write_options, my_batch, nullptr, nullptr);
 }
 

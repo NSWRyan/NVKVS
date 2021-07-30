@@ -39,6 +39,7 @@ class WriteBatchBase {
                      const SliceParts& value);
   virtual Status Put(const SliceParts& key, const SliceParts& value);
 
+  virtual Status Put2(const Slice& key, const Slice& value) = 0;
   // Merge "value" with the existing value of "key" in the database.
   // "key->merge(existing, value)"
   virtual Status Merge(ColumnFamilyHandle* column_family, const Slice& key,

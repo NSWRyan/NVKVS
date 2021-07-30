@@ -34,15 +34,23 @@ void DBImpl::load_pmem(bool new_old){
 }
 
 string DBImpl::put_custom(const char *key, u_short key_length, const char *value, u_short value_length){
-    job_struct *js=new job_struct();
+    std::cout<<"Put custom"<<endl;
+    rocksdb::job_struct *js=new rocksdb::job_struct();
     js->key=key;
     js->key_length=key_length;
     js->value=value;
     js->value_length=value_length;
+    js->total_length=4+key_length+value_length;
     js->status=false;
     jt.addWork_write(js);
     while(!js->status){cout<<"";}; // Wait until the job is done
-    return string((char*)&js->offset,8); // The size of a long is 8 byte.
+    long offset=js->offset;
+    return string((char*)&offset,8); // The size of a long is 8 byte.
+}
+
+void DBImpl::put_custom_wb(WriteBatch* the_batch){
+    jt.addWork_write_batch(the_batch);
+    while(!the_batch->wb_status){cout<<"";}; // Wait until the job is done
 }
 
 string DBImpl::get_custom(const char *string_offset){

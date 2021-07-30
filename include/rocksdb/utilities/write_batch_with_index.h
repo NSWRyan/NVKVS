@@ -109,6 +109,8 @@ class WriteBatchWithIndex : public WriteBatchBase {
 
   Status Put(const Slice& key, const Slice& value) override;
 
+  using WriteBatchBase::Put2;
+  Status Put2(const Slice& key, const Slice& value) override;
   using WriteBatchBase::Merge;
   Status Merge(ColumnFamilyHandle* column_family, const Slice& key,
                const Slice& value) override;

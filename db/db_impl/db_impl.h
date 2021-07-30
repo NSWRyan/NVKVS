@@ -164,6 +164,7 @@ class DBImpl : public DB {
   void load_pmem_first();
   Slice get_iter(const char *string_offset);
   string put_custom(const char *key, u_short key_length, const char *value, u_short value_length);
+  void put_custom_wb(WriteBatch* the_batch);
   string get_custom(const char *string_offset);
   void load_pmem(bool new_old);
 

@@ -52,7 +52,10 @@ int pmem_manager::open_pmem(u_short nThread, bool start_new){
 
     if(load_header(nThread)!=0){
         cout<<"Load header fail"<<endl;
-        cout<<"Init with default value, 3"<<endl;
+        init_pmem(nThread);
+        if(load_header(nThread)!=0){
+            cout<<"Load header fail again"<<endl;
+        }
     }
     initiated=true;
     return 0;
@@ -158,7 +161,7 @@ void pmem_manager::insertNT(const char* key, u_short key_length, const char* val
     memcpy(pmem_addr+write_offset+2,&value_length,2);
 
     // Write and persist key and value
-    memcpy(pmem_addr+write_offset+4,key,  key_length);
+    memcpy(pmem_addr+write_offset+4,key,key_length);
     memcpy(pmem_addr+write_offset+4+key_length,value, value_length);
 
     persist_fn(pmem_addr+write_offset,4+key_length+value_length);
