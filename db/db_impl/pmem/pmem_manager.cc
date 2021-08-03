@@ -163,8 +163,22 @@ void pmem_manager::insertNT(const char* key, u_short key_length, const char* val
     // Write and persist key and value
     memcpy(pmem_addr+write_offset+4,key,key_length);
     memcpy(pmem_addr+write_offset+4+key_length,value, value_length);
-
     persist_fn(pmem_addr+write_offset,4+key_length+value_length);
+}
+
+void pmem_manager::insertBatch(rocksdb::WriteBatch* wb){
+    size_t v_size=wb->writebatch_data->size();
+    for(size_t i=0;i<v_size;i++){
+        rocksdb::job_struct* js=wb->writebatch_data->at(i);
+        memcpy(pmem_addr+js->offset,&(js->key_length),2);
+        memcpy(pmem_addr+js->offset+2,&(js->value_length),2);
+        memcpy(pmem_addr+js->offset+4,js->key,js->key_length);
+        memcpy(pmem_addr+js->offset+4+js->key_length,js->value, js->value_length);
+    }
+}
+
+void pmem_manager::persist(long insert_offset, long length){
+    persist_fn(pmem_addr+insert_offset,length);
 }
 
 /* Deprecated

@@ -2,13 +2,17 @@
 #include <memory>
 #include <list>
 #include <vector>
-
 #include "db/db_impl/pmem/pmem_manager.h"
 #include "rocksdb/write_batch.h"
 #ifdef _WIN32
 #include <Windows.h>
 #else
 #include <unistd.h>
+#endif
+
+#ifndef custom_pmem
+#define custom_pmem
+#include "db/db_impl/db_impl.h"
 #endif
 
 struct MutexLock
@@ -27,17 +31,23 @@ struct pointer_passer{
     bool writer;
 };
 
+struct batch_helper{
+    vector<rocksdb::WriteBatch*>* v_wb_result=NULL;
+    int write_size=0;
+    ~batch_helper(){
+        delete(v_wb_result);
+    }
+};
+
 // pthreads is a C library the call back must be a C function.
 extern "C" void* threadPoolThreadStart(void*);
 
-
 class job_threads
 {
-
     public:
         job_threads();
         ~job_threads();
-
+        //rocksdb::DBImpl* DBI;
         void addWork_write(rocksdb::job_struct *job);
         void addWork_write_batch(rocksdb::WriteBatch *job);
         void addWork_read(job_pointer *job);
@@ -47,13 +57,16 @@ class job_threads
 
         // Stop all write threads
         void stopThreads();
-
+        rocksdb::DBImpl* DBI;
+        int batchSize=0;
+        bool batchedBatch=true;
+        bool pipelinedWrite=false;
 
     private:
         friend void* job_threads_Start(void*);
         bool initiated;
 
-        rocksdb::WriteBatch* getJob_w();
+        batch_helper* getJob_w();
         job_pointer* getJob_r();
         pmem_manager *this_pman;
         bool                finished;   // Threads will re-wait while this is true.
@@ -66,5 +79,6 @@ class job_threads
         std::list<job_pointer*>     workQueue_r;  // A queue of jobs.
         std::vector<pthread_t>threads_write;
         std::vector<pthread_t>threads_read;
+        int count=0;
 };
 

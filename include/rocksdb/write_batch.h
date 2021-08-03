@@ -32,6 +32,7 @@
 #include "rocksdb/status.h"
 #include "rocksdb/write_batch_base.h"
 #include <iostream>
+#include "rocksdb/options.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -65,6 +66,9 @@ struct job_struct{
     
     const char *value;
     u_short value_length;
+    // This is used for the LSM-tree insertion
+    int total_length_separated;
+    // This is used for the PMEM insertion
     int total_length;
     long offset;
     bool status;
@@ -74,7 +78,10 @@ struct job_struct{
     const char *i_value, u_short i_value_length):
       key(i_key),key_length(i_key_length),
       value(i_value),value_length(i_value_length),
-      total_length(4+i_key_length+i_value_length),status(false){};
+      total_length_separated(i_key_length+8+24),
+      // +4  is the header length for key length and value length 
+      total_length(4 + i_key_length + i_value_length),
+      offset(0),status(false){};
 };
 
 class WriteBatch : public WriteBatchBase {
@@ -85,7 +92,9 @@ class WriteBatch : public WriteBatchBase {
   bool pmem_init=false;
   job_struct* result=NULL;
   long total_write=0;
+  long total_write_rdb=0;
   long offset_start=0;
+  WriteOptions* write_options;
 
   // Original
   explicit WriteBatch(size_t reserved_bytes = 0, size_t max_bytes = 0);
@@ -100,8 +109,8 @@ class WriteBatch : public WriteBatchBase {
     // Plasta
     job_struct* js=new job_struct(key.data(),key.size(),value.data(),value.size());
     total_write+=js->total_length;
+    total_write_rdb+=js->total_length_separated;
     writebatch_data->push_back(js);
-    
     return Status::OK();
     // Original
     // return Put(nullptr, key, value);

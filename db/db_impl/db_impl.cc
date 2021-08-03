@@ -658,6 +658,8 @@ Status DBImpl::CloseHelper() {
 Status DBImpl::CloseImpl() { return CloseHelper(); }
 
 DBImpl::~DBImpl() {
+  delete(jt);
+  delete(pman);
   if (!closed_) {
     closed_ = true;
     CloseHelper().PermitUncheckedError();

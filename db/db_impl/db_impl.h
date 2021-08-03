@@ -64,8 +64,9 @@
 #include "util/stop_watch.h"
 #include "util/thread_local.h"
 
+class job_threads;
+class pmem_manager;
 #ifndef custom_pmem
-#define custom_pmem
 #include "db/db_impl/pmem/job_threads.h"
 #endif
 
@@ -144,10 +145,10 @@ class DBImpl : public DB {
   void operator=(const DBImpl&) = delete;
   //Plasta
   // The pmem_manager
-  pmem_manager pman;
+  pmem_manager* pman;
 
   // The job manager for separated key value
-  job_threads jt;
+  job_threads* jt;
 
   // Nthread for pmem
   u_short nThreadWrite=5;
@@ -161,7 +162,6 @@ class DBImpl : public DB {
   // ---- Implementations of the DB interface ----
 
   // Plasta functions
-  void load_pmem_first();
   Slice get_iter(const char *string_offset);
   string put_custom(const char *key, u_short key_length, const char *value, u_short value_length);
   void put_custom_wb(WriteBatch* the_batch);

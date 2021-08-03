@@ -306,7 +306,15 @@ WriteBatch& WriteBatch::operator=(WriteBatch&& src) {
   return *this;
 }
 
-WriteBatch::~WriteBatch() { }
+WriteBatch::~WriteBatch() {
+  // Plasta
+  int wbd_size=writebatch_data->size();
+  for (int i=0;i<wbd_size;i++){
+    job_struct* js=writebatch_data->at(i);
+    delete(js);
+  }
+  delete(writebatch_data);
+}
 
 WriteBatch::Handler::~Handler() { }
 

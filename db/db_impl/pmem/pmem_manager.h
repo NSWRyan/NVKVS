@@ -24,6 +24,7 @@
 #include <condition_variable>
 #include <mutex>
 #include "rocksdb/write_batch.h"
+#include "rocksdb/db.h"
 
 using namespace std;
 
@@ -79,6 +80,7 @@ class pmem_manager{
 
     public:
     pmem2_persist_fn persist_fn;
+    rocksdb::DB* db;
     long* offsets; 
     pmem_manager();
     ~pmem_manager();
@@ -97,6 +99,9 @@ class pmem_manager{
  
     long insertST(string key, u_short key_length, string value, u_short value_length);
     void insertNT(const char* key, u_short key_length, const char* value, u_short value_length, long write_offset);
+    void insertBatch(rocksdb::WriteBatch* wb);
+    void persist(long insert_offset, long length);
+    
     // int readST(long offset, job_struct &the_job); Deprecated
     int readSTNC(job_pointer *the_job);
 };
