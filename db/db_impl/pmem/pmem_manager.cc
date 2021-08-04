@@ -177,6 +177,8 @@ void pmem_manager::insertBatch(rocksdb::WriteBatch* wb){
     }
 }
 
+
+
 void pmem_manager::persist(long insert_offset, long length){
     persist_fn(pmem_addr+insert_offset,length);
 }

@@ -20,15 +20,25 @@ namespace ROCKSDB_NAMESPACE {
 // Convenience methods
 Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
                    const Slice& key, const Slice& val) {
+  job_struct* js=new job_struct(key.data(),key.size(),val.data(),val.size());
+  if(!o.disableWAL){
+      if(column_family->GetID())
+        std::cout<<"";
+  }
+  put_custom(js);
+  //delete(js);
+  return Status::OK();
   //@PLASTA
   // 8 byte is the offset length
-    if(column_family->GetID()){
-      std::cout<<"";
+  /*  
+    if(!o.disableWAL){
+      if(column_family->GetDescriptor())
+        std::cout<<"";
     }
     WriteBatch batch(key.size() + 8 + 24);
     Status s = batch.Put(key, val);
-    return Write(o, &batch);
-  // Original*/
+    return Write(o, &batch);*/
+  // Original
   // return DB::Put(o, column_family, key, val);
 }
 
@@ -60,18 +70,18 @@ void DBImpl::SetRecoverableStatePreReleaseCallback(
 
 Status DBImpl::Write(const WriteOptions& write_options, WriteBatch* my_batch) {
   // PLASTA
-  if(!my_batch->pmem_init){
+  /*if(!my_batch->pmem_init){
     put_custom_wb(my_batch);
     if(write_options.disableWAL){}
     // To do move the batch to from the vector back to batch
-    /*
+    
     int v_size=my_batch->writebatch_data->size();
     for(int i=0;i<v_size;i++){
       job_struct* temp_js=my_batch->writebatch_data->at(i);
       my_batch->Put2(temp_js->key, string((char*)&(temp_js->offset),8));
-    }*/
+    }
     return Status::OK();
-  }
+  }*/
   return WriteImpl(write_options, my_batch, nullptr, nullptr);
 }
 

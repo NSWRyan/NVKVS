@@ -17,7 +17,8 @@ int job_threads::init(u_short threadCount_write, u_short threadCount_read, pmem_
     threads_write.resize(threadCount_write);
     threads_read.resize(threadCount_read);
     this_pman=pman;
-
+    timerus=1000;
+    workQueue_w=(rocksdb::job_struct**)malloc(sizeof(rocksdb::job_struct*)*list_capacity);
     // Write part
     // If we fail creating either pthread object then throw a fit.
     if (pthread_mutex_init(&mutex_w, NULL) != 0)
@@ -30,21 +31,34 @@ int job_threads::init(u_short threadCount_write, u_short threadCount_read, pmem_
         throw int(2);
     }
 
+    // Start timer thread
+    {
+        pointer_passer *pass_this=new pointer_passer(0);
+        pass_this->timer=true;
+        pass_this->job_threads_handler=reinterpret_cast<void*>(this);
+        if (pthread_create(&timer_thread, NULL, threadPoolThreadStart, pass_this) != 0)
+        {
+             pthread_cancel(timer_thread);
+             pthread_join(timer_thread,NULL);
+             throw int(3);
+        }
+    }
+
     for(u_short loop=0; loop < threadCount_write;++loop)
     {
-       pointer_passer *pass_this=new pointer_passer(loop);
-       pass_this->writer=true;
-       pass_this->job_threads_handler=reinterpret_cast<void*>(this);
-       if (pthread_create(&threads_write[loop], NULL, threadPoolThreadStart, pass_this) != 0)
-       {
-            // One thread failed: clean up
-            for(unsigned int kill = loop -1; kill < loop /*unsigned will wrap*/;--kill)
-            {
-                pthread_cancel(threads_write[kill]);
-                pthread_join(threads_write[kill],NULL);
-            }
-            throw int(3);
-       }
+        pointer_passer *pass_this=new pointer_passer(loop);
+        pass_this->writer=true;
+        pass_this->job_threads_handler=reinterpret_cast<void*>(this);
+        if (pthread_create(&threads_write[loop], NULL, threadPoolThreadStart, pass_this) != 0)
+        {
+                // One thread failed: clean up
+                for(unsigned int kill = loop -1; kill < loop /*unsigned will wrap*/;--kill)
+                {
+                    pthread_cancel(threads_write[kill]);
+                    pthread_join(threads_write[kill],NULL);
+                }
+                throw int(3);
+        }
     }
 
     // Read part
@@ -75,6 +89,7 @@ int job_threads::init(u_short threadCount_write, u_short threadCount_read, pmem_
             throw int(3);
        }
     }
+    wo.disableWAL=true;
     initiated=true;
     return 0;
 }
@@ -83,20 +98,20 @@ int job_threads::init(u_short threadCount_write, u_short threadCount_read, pmem_
 job_threads::~job_threads()
 {
     if(initiated){
-        pthread_cond_signal(&cond_w);
+        finished = true;
+        delete(workQueue_w);
         while(workQueue_w_batch.size()!=0){
             // Wait till job is done
             cout<<"";
         }
+
         while(workQueue_r.size()!=0){
             // Wait till job is done
             cout<<"";
         }
-
         //////////////////////////////////////////////////////////////////////////
         // Write part
         //////////////////////////////////////////////////////////////////////////
-        finished = true;
         for(std::vector<pthread_t>::iterator loop = threads_write.begin();loop != threads_write.end(); ++loop)
         {
             // Send enough signals to free all threads.
@@ -154,12 +169,14 @@ job_threads::~job_threads()
 // Add a new job to the queue
 // Signal the condition variable. This will flush a waiting worker
 // otherwise the job will wait for a worker to finish processing its current job.
-// Deprecated and replaced with batch
 void job_threads::addWork_write(rocksdb::job_struct *job)
 {
-    MutexLock  lock(mutex_w);
-    workQueue_w.push_back(job);
-    pthread_cond_signal(&cond_w);
+    MutexLock lock(mutex_w);
+    b_cond_w=true;
+    workQueue_w[w_count]=job;
+    w_count++;
+    delete(job);
+    b_cond_w=false;
 }
 
 // Add a new job to the queue
@@ -167,24 +184,26 @@ void job_threads::addWork_write(rocksdb::job_struct *job)
 // otherwise the job will wait for a worker to finish processing its current job.
 void job_threads::addWork_write_batch(rocksdb::WriteBatch *job)
 {
-    MutexLock  lock(mutex_w);
+    MutexLock lock(mutex_w);
+    b_cond_w=true;
     workQueue_w_batch.push_back(job);
     pthread_cond_signal(&cond_w);
+    b_cond_w=false;
 }
 
 void job_threads::addWork_read(job_pointer *job)
 {
-    MutexLock  lock(mutex_r);
+    MutexLock lock(mutex_r);
     workQueue_r.push_back(job);
     pthread_cond_signal(&cond_r);
 }
 
 // This is the main worker loop for write.
-void job_threads::workerStart_write()
+void job_threads::workerStart_write(u_short thread_id)
 {
     while(!finished)
     {
-        batch_helper* jobs = getJob_w();
+        batch_helper* jobs = getJob_w(thread_id);
         // This is the batched write size for the LSM tree
         
         if(jobs!=NULL){
@@ -214,16 +233,20 @@ void job_threads::workerStart_write()
                     wb_compilation->Put2(temp_js->key,
                         string((char*)(&(temp_js->offset)),8));
                 }
-
+                // Tell the client that the write is done
+                if(pipelinedWrite){
+                    temp_wb->wb_status=true;
+                }
+            }
+            for (int wb_index=0;wb_index<jobs_size;wb_index++){
+                rocksdb::WriteBatch* temp_wb=jobs->v_wb_result->at(wb_index);
                 // Now write into PMEM
                 this_pman->insertBatch(temp_wb);
-
-                // Tell the client that the write is done
                 temp_wb->wb_status=true;
             }
             
             wb_compilation->pmem_init=true;
-            DBI->Write(rocksdb::WriteOptions(),wb_compilation);
+            DBI->Write(wo,wb_compilation);
             this_pman->persist(persist_offset,to_persist_length);
             delete(jobs);
             delete(wb_compilation);
@@ -244,14 +267,37 @@ void job_threads::workerStart_read()
     }
 }
 
-// Get a new job for the write thread
-batch_helper* job_threads::getJob_w()
-{
-    MutexLock  lock(mutex_w);
 
-    while((workQueue_w_batch.empty()) && (!finished))
+// This is the timer loop for write.
+void job_threads::timerStart_write()
+{
+    while(!finished)
     {
+        usleep(timerus);
+        while (b_cond_w){
+            if(finished){
+                break;
+            }
+            usleep(1);
+        }
+        timer_lock=true;
+        pthread_cond_signal(&cond_w);
+    }
+}
+
+// Get a new job for the write thread
+batch_helper* job_threads::getJob_w(u_short thread_id)
+{
+    if(thread_id){
+        cout<<"";
+    }
+    MutexLock lock(mutex_w);
+    b_cond_w=true;
+    while((!timer_lock) && (!finished))
+    {
+        b_cond_w=false;
         pthread_cond_wait(&cond_w, &mutex_w);
+        
         // The wait releases the mutex lock and suspends the thread (until a signal).
         // When a thread wakes up it is help until it can acquire the mutex so when we
         // get here the mutex is again locked.
@@ -269,11 +315,14 @@ batch_helper* job_threads::getJob_w()
         //   it would try and remove an item from an empty queue. With a while it sees
         //   that the queue is empty and re-suspends on the condition variable above.
     }
+    timer_lock=false;
+    b_cond_w=true;
     batch_helper* result=NULL;
-
+    w_count=0;
     // WriteBatches                    (v_wb_result)
     //       WriteBatch                (wb_result)
     //              Job_struct         (wb_result->writebatch_data)
+    /*
     if (!finished)
     {   
         result=new batch_helper();
@@ -281,9 +330,9 @@ batch_helper* job_threads::getJob_w()
         long current_offset=this_pman->current_offset.offset_current;
         long total_write=0;
 
-        if(!batchedBatch){
-            // Single batch
-            if(!workQueue_w_batch.empty()){
+        if(batchedBatch){
+            // Multiple batch
+            while(!workQueue_w_batch.empty()&&total_write<batchSize){
                 // Obtain the jobs
                 rocksdb::WriteBatch* wb_result=workQueue_w_batch.front();
                 
@@ -300,8 +349,8 @@ batch_helper* job_threads::getJob_w()
                 workQueue_w_batch.pop_front();
             }
         }else{
-            // Multiple batch
-            while((!workQueue_w_batch.empty())&&total_write<batchSize){
+            // Single batch
+            if((!workQueue_w_batch.empty())){
                 // Obtain the jobs
                 rocksdb::WriteBatch* wb_result=workQueue_w_batch.front();
                 
@@ -321,7 +370,8 @@ batch_helper* job_threads::getJob_w()
         // PMEM offset management
         this_pman->current_offset.offset_current += total_write;
         this_pman->offsets[2]=this_pman->current_offset.offset_current;
-    }
+    }*/
+    b_cond_w=false;
     return result;
 }
 
@@ -367,8 +417,11 @@ void* threadPoolThreadStart(void* data)
     {
         if(ps->writer){
             //cout<<"Write Thread started "<<threadID<<endl;
-            jt->workerStart_write();
+            jt->workerStart_write(ps->threadID);
         }else{
+            if(ps->timer){
+                jt->timerStart_write();
+            }
             //cout<<"Read Thread started "<<threadID<<endl;
             jt->workerStart_read();
         }

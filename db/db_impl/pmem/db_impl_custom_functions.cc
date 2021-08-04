@@ -24,7 +24,7 @@ void DBImpl::load_pmem(bool new_old){
         if(batchSize==0){
             batchedBatch=false;
         }
-        
+
         getline(main_file,conf_input); // the batchSize
         batchSize = stoi(conf_input);
 
@@ -59,19 +59,16 @@ void DBImpl::load_pmem(bool new_old){
 }
 
 string DBImpl::put_custom(const char *key, u_short key_length, const char *value, u_short value_length){
-    rocksdb::job_struct *js=new rocksdb::job_struct();
-    js->key=key;
-    js->key_length=key_length;
-    js->value=value;
-    js->value_length=value_length;
-    js->total_length=4+key_length+value_length;
-    js->status=false;
+    rocksdb::job_struct *js=new rocksdb::job_struct(key,key_length,value,value_length);
     jt->addWork_write(js);
     while(!js->status){cout<<"";}; // Wait until the job is done
     long offset=js->offset;
     return string((char*)&offset,8); // The size of a long is 8 byte.
 }
 
+void DBImpl::put_custom(job_struct* js){
+    jt->addWork_write(js);
+}
 void DBImpl::put_custom_wb(WriteBatch* the_batch){
     jt->addWork_write_batch(the_batch);
     while(!the_batch->wb_status){cout<<"";}; // Wait until the job is done
