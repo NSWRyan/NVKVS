@@ -72,6 +72,7 @@ struct job_struct{
     int total_length;
     long offset;
     bool status;
+    int throttle;
     u_short threadID;
     job_struct():key_length(0),value_length(0),total_length(0),status(false){};
     job_struct(const char *i_key, u_short i_key_length, 
@@ -84,6 +85,7 @@ struct job_struct{
       value=(char*)malloc(i_value_length);
       memcpy(key,i_key,key_length);
       memcpy(value,i_value,value_length);
+      throttle=0;
     }
     ~job_struct(){
       delete(key);

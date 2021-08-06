@@ -19,11 +19,11 @@ int job_threads::init(u_short threadCount_write, u_short threadCount_read, pmem_
     this_pman=pman;
     throttle=false;
     timer_lock=false;
-    slow_down=1000;
+    slow_down=10000;
     buffer_high_threshold=1000000000;
     buffer_low_threshold=500000000;
     list_capacity=1000000;
-    timerus=1000;
+    timerus=100;
     current_buffer_size=0;
     // Allocate the buffers
     workQueue_w=(rocksdb::job_struct**)malloc(sizeof(rocksdb::job_struct*)*list_capacity);
@@ -209,7 +209,7 @@ void job_threads::addWork_write(rocksdb::job_struct *job)
     b_cond_w=false;
     if(throttle){
         // Sleep for 1000 ms when insert is too slow
-        usleep(slow_down);
+        job->throttle=slow_down;
     }
 }
 
@@ -260,9 +260,7 @@ void job_threads::workerStart_write(u_short thread_id)
                 if(this_pman->offsets[2]<jobs->new_offset){
                     this_pman->offsets[2]=jobs->new_offset;
                 }
-
                 delete(jobs);
-                
             }
         }
         {
