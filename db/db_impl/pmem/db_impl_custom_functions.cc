@@ -69,7 +69,6 @@ string DBImpl::put_custom(const char *key, u_short key_length, const char *value
 
 void DBImpl::put_custom(job_struct* js){
     jt->addWork_write(js);
-    while(!js->status){cout<<"";}
 }
 void DBImpl::put_custom_wb(WriteBatch* the_batch){
     jt->addWork_write_batch(the_batch);

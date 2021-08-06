@@ -205,9 +205,6 @@ void job_threads::addWork_write(rocksdb::job_struct *job)
     // Insert into the buffer
     workQueue_w[w_count]=job;
     current_buffer_size+=job->total_length;
-    job->offset=this_pman->current_offset.offset_current;
-    this_pman->current_offset.offset_current+=job->total_length;
-    job->status=true;
     w_count++;
     b_cond_w=false;
     if(throttle){
@@ -243,16 +240,17 @@ void job_threads::workerStart_write(u_short thread_id)
         {
             batch_job* jobs = getJob_w(thread_id);
             if(jobs!=NULL){
-                //rocksdb::WriteBatch wb_in(jobs->wb_size);
+                rocksdb::WriteBatch wb_in(jobs->wb_size);
                 for(int i=0;i<jobs->n_jobs;i++){
                     // Write into PMem
                     this_pman->insertJS(jobs->jobs[i]);
                     // Insert into write batch for the LSM-tree
-                    //wb_in.Put2(jobs->jobs[i]->key,string((char*)(&(jobs->jobs[i]->offset)),8));
+                    wb_in.Put2(rocksdb::Slice(jobs->jobs[i]->key,jobs->jobs[i]->key_length),
+                            rocksdb::Slice((char*)(&(jobs->jobs[i]->offset)),8));
                 }
                 // Write into the LSM-tree
-                //wb_in.pmem_init=true;
-                //DBI->Write(wo,&wb_in);
+                wb_in.pmem_init=true;
+                DBI->Write(wo,&wb_in);
 
                 // Persist the data
                 long start_offset=jobs->jobs[0]->offset;
@@ -271,16 +269,17 @@ void job_threads::workerStart_write(u_short thread_id)
             if(finished&&thread_id==0&&w_count>0){
                 batch_job* jobs = getJob_w(thread_id);
                 if(jobs!=NULL){
-                    //rocksdb::WriteBatch wb_in(jobs->wb_size);
+                    rocksdb::WriteBatch wb_in(jobs->wb_size);
                     for(int i=0;i<jobs->n_jobs;i++){
                         // Write into PMem
                         this_pman->insertJS(jobs->jobs[i]);
                         // Insert into write batch for the LSM-tree
-                        //wb_in.Put2(jobs->jobs[i]->key,string((char*)(&(jobs->jobs[i]->offset)),8));
+                        wb_in.Put2(rocksdb::Slice(jobs->jobs[i]->key,jobs->jobs[i]->key_length),
+                            rocksdb::Slice((char*)(&(jobs->jobs[i]->offset)),8));
                     }
                     // Write into the LSM-tree
-                    //wb_in.pmem_init=true;
-                    //DBI->Write(wo,&wb_in);
+                    wb_in.pmem_init=true;
+                    DBI->Write(wo,&wb_in);
 
                     // Persist the data
                     long start_offset=jobs->jobs[0]->offset;
@@ -339,8 +338,8 @@ batch_job* job_threads::getJob_w(u_short thread_id)
 {
     int t_w_count=0;
     long t_current_buffer_size=0;
-    //long start_offset=0;
-    //long new_offset=0;
+    long start_offset=0;
+    long new_offset=0;
     {   // Lock region, do as few as possible here
         MutexLock lock(mutex_w);
         b_cond_w=true;
@@ -379,10 +378,10 @@ batch_job* job_threads::getJob_w(u_short thread_id)
             temp=NULL;
 
             // Offset management
-            /*
+            
             start_offset=this_pman->current_offset.offset_current;
             this_pman->current_offset.offset_current+=current_buffer_size;
-            new_offset=this_pman->current_offset.offset_current;*/
+            new_offset=this_pman->current_offset.offset_current;
 
             //Reset the writes
             current_buffer_size=0;
@@ -397,10 +396,13 @@ batch_job* job_threads::getJob_w(u_short thread_id)
     if (t_w_count>0)
     {   
         result=new batch_job(t_w_count);
-        result->new_offset=wtd[thread_id].buffer[t_w_count-1]->offset+wtd[thread_id].buffer[t_w_count-1]->total_length;
+        result->new_offset=new_offset;
         result->total_write_byte=t_current_buffer_size;
 
         for(int i=0;i<t_w_count;i++){
+            // Offset management
+            wtd[thread_id].buffer[i]->offset=start_offset;
+            start_offset+=wtd[thread_id].buffer[i]->total_length;
             // Insert into the batch_job
             result->jobs[i]=wtd[thread_id].buffer[i];
             result->wb_size+=wtd[thread_id].buffer[i]->total_length_separated;
