@@ -41,6 +41,36 @@ struct batch_helper{
     }
 };
 
+struct batch_job{
+    int n_jobs;
+    int wb_size;
+    long total_write_byte;
+    long new_offset;
+    rocksdb::job_struct** jobs;
+    batch_job(int i_n_jobs){
+        n_jobs=i_n_jobs;
+        wb_size=0;
+        total_write_byte=0;
+        new_offset=0;
+        jobs=(rocksdb::job_struct**)malloc(sizeof(rocksdb::job_struct*)*i_n_jobs);
+    };
+    ~batch_job(){
+        for(int i=0;i<n_jobs;i++){
+            delete(jobs[i]);
+        }
+        delete(jobs);
+    };
+};
+
+struct write_threads_data{
+    rocksdb::job_struct** buffer=NULL;
+    write_threads_data(){
+    };
+    ~write_threads_data(){
+        delete(buffer);
+    };
+};
+
 // pthreads is a C library the call back must be a C function.
 extern "C" void* threadPoolThreadStart(void*);
 
@@ -64,13 +94,22 @@ class job_threads
         int batchSize=0;
         bool batchedBatch=true;
         bool pipelinedWrite=false;
+        int buffer_high_threshold;
+        int buffer_low_threshold;
         int list_capacity=10000000;
+        int timerus=0;
+        int slow_down=0;
+        int w_count=0;
+        bool b_cond_w=true;
+        bool timer_lock=true;
+        bool throttle=false;
+        long current_buffer_size;
 
     private:
         friend void* job_threads_Start(void*);
         bool initiated;
 
-        batch_helper* getJob_w(u_short thread_id);
+        batch_job* getJob_w(u_short thread_id);
         job_pointer* getJob_r();
         pmem_manager *this_pman;
         bool                finished;   // Threads will re-wait while this is true.
@@ -86,9 +125,7 @@ class job_threads
         std::vector<pthread_t>threads_write;
         std::vector<pthread_t>threads_read;
         rocksdb::WriteOptions wo;
-        int timerus=0;
-        int w_count=0;
-        bool b_cond_w=true;
-        bool timer_lock=true;
+        write_threads_data* wtd;
+        bool timer_alive=false;
 };
 

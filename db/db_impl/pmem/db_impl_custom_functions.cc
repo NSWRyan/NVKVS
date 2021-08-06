@@ -1,5 +1,6 @@
 #include <iostream>
 #include "db/db_impl/db_impl.h"
+#include <time.h>
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -68,6 +69,7 @@ string DBImpl::put_custom(const char *key, u_short key_length, const char *value
 
 void DBImpl::put_custom(job_struct* js){
     jt->addWork_write(js);
+    while(!js->status){cout<<"";}
 }
 void DBImpl::put_custom_wb(WriteBatch* the_batch){
     jt->addWork_write_batch(the_batch);
@@ -82,14 +84,6 @@ string DBImpl::get_custom(const char *string_offset){
     jp.status=false;
 
     pman->readSTNC(&jp);
-    //jt->addWork_read(&jp);
-    //while(!jp.status){cout<<"";}; // Wait until read is done
-    /*
-    {
-        unique_lock<mutex> lk(jp.m);
-        jobs_w[i].cv.wait(lk,[&]{return jobs_w[i].status;});
-    }
-    */
     return string(jp.value_offset,jp.value_length);
 }
 

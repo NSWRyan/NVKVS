@@ -3850,8 +3850,6 @@ Status DB::DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) {
 DB::~DB() {}
 
 Status DBImpl::Close() {
-  delete(jt);
-  delete(pman);
   if (!closed_) {
     {
       InstrumentedMutexLock l(&mutex_);

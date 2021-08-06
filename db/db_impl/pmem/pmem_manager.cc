@@ -63,7 +63,9 @@ int pmem_manager::open_pmem(u_short nThread, bool start_new){
 
 // Clear all of the mappings
 int pmem_manager::close_pmem(){
+    initiated=false;
     // Update the offset and persist it.
+    offsets[2]=current_offset.offset_current;
     persist_fn(offsets+3,8*4);
     pmem2_map_delete(&map);
     pmem2_source_delete(&src);
@@ -175,6 +177,13 @@ void pmem_manager::insertBatch(rocksdb::WriteBatch* wb){
         memcpy(pmem_addr+js->offset+4,js->key,js->key_length);
         memcpy(pmem_addr+js->offset+4+js->key_length,js->value, js->value_length);
     }
+}
+
+void pmem_manager::insertJS(rocksdb::job_struct* js){
+    memcpy(pmem_addr+js->offset,&(js->key_length),2);
+    memcpy(pmem_addr+js->offset+2,&(js->value_length),2);
+    memcpy(pmem_addr+js->offset+4,js->key,js->key_length);
+    memcpy(pmem_addr+js->offset+4+js->key_length,js->value, js->value_length);
 }
 
 

@@ -26,8 +26,11 @@ Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
         std::cout<<"";
   }
   put_custom(js);
+  long offset=js->offset;
   //delete(js);
-  return Status::OK();
+  WriteBatch batch(key.size() + 8 + 24);
+  batch.Put2(key, string((char*)(&(offset)),8));
+  return Write(o, &batch);
   //@PLASTA
   // 8 byte is the offset length
   /*  
