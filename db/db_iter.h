@@ -123,6 +123,9 @@ class DBIter final : public Iterator {
   DBIter(const DBIter&) = delete;
   void operator=(const DBIter&) = delete;
 
+  // Plasta
+  Iterator *iter_llsm=NULL;
+
   ~DBIter() override {
     // Release pinned data if any
     if (pinned_iters_mgr_.PinningEnabled()) {
@@ -167,10 +170,17 @@ class DBIter final : public Iterator {
       return pinned_value_;
     } else {
       // Plasta return the value
-      return db_impl_->get_iter(iter_.value().data());
-
-      // Original
-      return iter_.value();
+      if(iter_.value().size_==8){
+        // In PMEM
+        return db_impl_->get_custom(iter_.value().data());
+      }else if(iter_.value().size_==1){
+        // In last level LSM
+        return iter_llsm->value();
+      }
+      else{
+        // Original
+        return iter_.value();
+      }
     }
   }
 

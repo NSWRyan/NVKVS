@@ -25,6 +25,13 @@
 #include <mutex>
 #include "rocksdb/write_batch.h"
 #include "rocksdb/db.h"
+#include "rocksdb/slice.h"
+#include "rocksdb/options.h"
+
+#ifndef custom_pmem
+#define custom_pmem
+#include "db/db_impl/db_impl.h"
+#endif
 
 using namespace std;
 
@@ -81,6 +88,7 @@ class pmem_manager{
     public:
     pmem2_persist_fn persist_fn;
     rocksdb::DB* db;
+    rocksdb::DBImpl* DBI;
     long* offsets; 
     pmem_manager();
     ~pmem_manager();
@@ -105,5 +113,7 @@ class pmem_manager{
     
     // int readST(long offset, job_struct &the_job); Deprecated
     int readSTNC(job_pointer *the_job);
+
+    void load_llsm();
 };
     

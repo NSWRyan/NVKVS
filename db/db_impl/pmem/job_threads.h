@@ -79,7 +79,6 @@ class job_threads
     public:
         job_threads();
         ~job_threads();
-        //rocksdb::DBImpl* DBI;
         void addWork_write(rocksdb::job_struct *job);
         void addWork_write_batch(rocksdb::WriteBatch *job);
         void addWork_read(job_pointer *job);
@@ -90,7 +89,6 @@ class job_threads
 
         // Stop all write threads
         void stopThreads();
-        rocksdb::DBImpl* DBI;
         int batchSize=0;
         bool batchedBatch=true;
         bool pipelinedWrite=false;

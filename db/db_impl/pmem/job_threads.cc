@@ -212,7 +212,7 @@ void job_threads::addWork_write(rocksdb::job_struct *job)
     b_cond_w=false;
     if(throttle){
         // Sleep for 1000 ms when insert is too slow
-        usleep(slow_down);
+        job->throttle=true;
     }
 }
 

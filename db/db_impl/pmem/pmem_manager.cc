@@ -6,6 +6,7 @@ using namespace std;
 pmem_manager::~pmem_manager(){
     if(initiated){
         close_pmem();
+        delete(db);
     }
 }
 
@@ -57,6 +58,7 @@ int pmem_manager::open_pmem(u_short nThread, bool start_new){
             cout<<"Load header fail again"<<endl;
         }
     }
+    //load_llsm();
     initiated=true;
     return 0;
 }
@@ -67,6 +69,15 @@ int pmem_manager::close_pmem(){
     // Update the offset and persist it.
     offsets[2]=current_offset.offset_current;
     persist_fn(offsets+3,8*4);
+    cout<<"Start pos"<<endl;
+    cout<<offsets[0]<<endl;
+    cout<<"last GC pos"<<endl;
+    cout<<offsets[1]<<endl;
+    cout<<"last write pos"<<endl;
+    cout<<offsets[2]<<endl;
+    cout<<"max write"<<endl;
+    cout<<offsets[3]<<endl;
+
     pmem2_map_delete(&map);
     pmem2_source_delete(&src);
     pmem2_config_delete(&cfg);
@@ -87,7 +98,7 @@ int pmem_manager::init_pmem(u_short nThread){
     // Total write + 2 bytes;
     offsets=(long*)(pmem_addr+3);
     // Offset sizes (3 longs)
-    total_write+=nThread*8*4;
+    total_write+=32;
     // Size for each partition, -1 is to ensure that no overcapacity writes
     max_write=(pmem_size-total_write-1);
     // The start position
@@ -220,4 +231,18 @@ int pmem_manager::readSTNC(job_pointer *the_job){
     //Value start after the key.
     the_job->value_offset=the_job->key_offset+the_job->key_length;
     return 0;
+}
+
+void pmem_manager::load_llsm(){
+    std::string kDBPath = "/home/ryan/RyanProject1/rdbshared/llsm/";
+    
+    rocksdb::Options options;
+    options.IncreaseParallelism();
+    options.OptimizeLevelStyleCompaction();
+    options.enable_pipelined_write=true;
+    options.num_levels=1;
+    options.compression_per_level.push_back(rocksdb::kNoCompression);
+    options.max_bytes_for_level_base=(100000000000); // 100 GB
+    options.compaction_style=rocksdb::kCompactionStyleLevel;
+    rocksdb::DB::Open(options,kDBPath,&db);
 }

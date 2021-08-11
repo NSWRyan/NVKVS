@@ -163,6 +163,15 @@ void DBIter::Next() {
     local_stats_.next_found_count_++;
     local_stats_.bytes_read_ += (key().size() + value().size());
   }
+  
+  if(iter_.value().size_==1){
+    if(iter_llsm==NULL){
+      iter_llsm=db_impl_->get_iter();
+      iter_llsm->Seek(iter_.key());
+    }else{
+      iter_llsm->Next();
+    }
+  }
 }
 
 // PRE: saved_key_ has the current user key if skipping_saved_key

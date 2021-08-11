@@ -72,10 +72,11 @@ struct job_struct{
     int total_length;
     long offset;
     bool status;
+    bool throttle;
     u_short threadID;
-    job_struct():key_length(0),value_length(0),total_length(0),status(false){};
+    job_struct():key_length(0),value_length(0),total_length(0),status(false),throttle(false){};
     job_struct(const char *i_key, u_short i_key_length, 
-    const char *i_value, u_short i_value_length):offset(0),status(false){
+    const char *i_value, u_short i_value_length):offset(0),status(false),throttle(false){
       total_length_separated=i_key_length+8+24;
       total_length=4 + i_key_length + i_value_length;
       key_length=i_key_length;

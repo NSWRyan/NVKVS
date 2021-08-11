@@ -4,8 +4,8 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-Slice DBImpl::get_iter(const char *string_offset){
-    return get_custom(string_offset);
+Iterator *DBImpl::get_iter(){
+    return pman->db->NewIterator(ReadOptions());
 }
 
 void DBImpl::load_pmem(bool new_old){
@@ -48,9 +48,9 @@ void DBImpl::load_pmem(bool new_old){
         std::cout<<"old DB"<<std::endl;
         pman->open_pmem(nThreadWrite,false);
     }
+    pman->DBI=this;
     jt=new job_threads();
     jt->init(nThreadWrite, nThreadRead, pman);
-    jt->DBI=this;
     jt->batchedBatch=batchedBatch;
     jt->batchSize=batchSize;
     jt->pipelinedWrite=pipelinedWrite;
@@ -59,24 +59,27 @@ void DBImpl::load_pmem(bool new_old){
     std::cout<<"pipelinedWrite "<<pipelinedWrite<<std::endl;
 }
 
-string DBImpl::put_custom(const char *key, u_short key_length, const char *value, u_short value_length){
+Slice DBImpl::put_custom(const char *key, u_short key_length, const char *value, u_short value_length){
     rocksdb::job_struct *js=new rocksdb::job_struct(key,key_length,value,value_length);
     jt->addWork_write(js);
     while(!js->status){cout<<"";}; // Wait until the job is done
     long offset=js->offset;
-    return string((char*)&offset,8); // The size of a long is 8 byte.
+    return rocksdb::Slice((char*)&offset,8); // The size of a long is 8 byte.
 }
 
 void DBImpl::put_custom(job_struct* js){
     jt->addWork_write(js);
-    while(!js->status){cout<<"";}
+    if(js->throttle){
+        usleep(100);
+    }
+    //while(!js->status){cout<<"";}
 }
 void DBImpl::put_custom_wb(WriteBatch* the_batch){
     jt->addWork_write_batch(the_batch);
     while(!the_batch->wb_status){cout<<"";}; // Wait until the job is done
 }
 
-string DBImpl::get_custom(const char *string_offset){
+Slice DBImpl::get_custom(const char *string_offset){
     // Plasta get the data from pmem here
     long offset=((long*)(string_offset))[0];
     job_pointer jp;
@@ -84,7 +87,7 @@ string DBImpl::get_custom(const char *string_offset){
     jp.status=false;
 
     pman->readSTNC(&jp);
-    return string(jp.value_offset,jp.value_length);
+    return Slice(jp.value_offset,jp.value_length);
 }
 
 }

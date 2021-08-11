@@ -162,11 +162,11 @@ class DBImpl : public DB {
   // ---- Implementations of the DB interface ----
 
   // Plasta functions
-  Slice get_iter(const char *string_offset);
-  string put_custom(const char *key, u_short key_length, const char *value, u_short value_length);
+  Iterator *get_iter();
+  Slice put_custom(const char *key, u_short key_length, const char *value, u_short value_length);
   void put_custom(job_struct* js);
   void put_custom_wb(WriteBatch* the_batch);
-  string get_custom(const char *string_offset);
+  Slice get_custom(const char *string_offset);
   void load_pmem(bool new_old);
 
   using DB::Resume;

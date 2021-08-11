@@ -1783,7 +1783,9 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
     if (s.ok()) {
       if (get_impl_options.get_value) {
         // Plasta get the data from pmem here
+        if(get_impl_options.value->size()==8){
           get_impl_options.value->PinSelf(get_custom(get_impl_options.value->data()));
+        }
         //get_impl_options.value->PinSelf("Modified value.");
         size = get_impl_options.value->size();
       } else {
