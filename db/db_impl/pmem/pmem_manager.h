@@ -57,17 +57,17 @@ struct job_pointer{
     u_short value_length;
     char *key_offset;
     char *value_offset;
-    long offset;
+    u_long offset;
     bool status;
     job_pointer():key_length(0),value_length(0),status(false){};
 };
 
 // START|start*****|gc******|current*****|STOP
 struct offset_helper{
-    long offset_start;
-    long offset_gc;
-    long offset_current;
-    long offset_max;
+    u_long offset_start;
+    u_long offset_gc;
+    u_long offset_current;
+    u_long offset_max;
 };
 
 class pmem_manager{
@@ -89,17 +89,17 @@ class pmem_manager{
     pmem2_persist_fn persist_fn;
     rocksdb::DB* db;
     rocksdb::DBImpl* DBI;
-    long* offsets; 
+    u_long* offsets; 
     pmem_manager();
     ~pmem_manager();
-    int open_pmem(u_short nThread, bool start_new);
+    int open_pmem(u_short nThread, bool start_new, string dir);
     char config_;
 
     // Only for 1 thread
-    long offset;
+    u_long offset;
 
     // Max write for each partition
-    long max_write;
+    u_long max_write;
 
     // The definition for the current files
     offset_helper current_offset;
@@ -109,7 +109,7 @@ class pmem_manager{
     void insertNT(const char* key, u_short key_length, const char* value, u_short value_length, long write_offset);
     void insertBatch(rocksdb::WriteBatch* wb);
     void insertJS(rocksdb::job_struct* js);
-    void persist(long insert_offset, long length);
+    void persist(u_long insert_offset, size_t length);
     
     // int readST(long offset, job_struct &the_job); Deprecated
     int readSTNC(job_pointer *the_job);

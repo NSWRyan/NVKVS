@@ -45,7 +45,7 @@ struct batch_job{
     int n_jobs;
     int wb_size;
     long total_write_byte;
-    long new_offset;
+    u_long new_offset;
     rocksdb::job_struct** jobs;
     batch_job(int i_n_jobs){
         n_jobs=i_n_jobs;
@@ -64,7 +64,9 @@ struct batch_job{
 
 struct write_threads_data{
     rocksdb::job_struct** buffer=NULL;
+    bool status;
     write_threads_data(){
+        status=false;
     };
     ~write_threads_data(){
         delete(buffer);
@@ -98,10 +100,14 @@ class job_threads
         int timerus=0;
         int slow_down=0;
         int w_count=0;
+        int total_w_count=0;
         bool b_cond_w=true;
         bool timer_lock=true;
         bool throttle=false;
         long current_buffer_size;
+        write_threads_data* wtd;
+        bool finished;   // Threads will re-wait while this is true.
+        u_short wait_count;
 
     private:
         friend void* job_threads_Start(void*);
@@ -110,7 +116,6 @@ class job_threads
         batch_job* getJob_w(u_short thread_id);
         job_pointer* getJob_r();
         pmem_manager *this_pman;
-        bool                finished;   // Threads will re-wait while this is true.
         pthread_mutex_t     mutex_w;      // A lock so that we can sequence accesses.
         pthread_mutex_t     mutex_r;      // A lock so that we can sequence accesses.
         pthread_cond_t      cond_w;       // The condition variable that is used to hold worker threads.
@@ -123,7 +128,6 @@ class job_threads
         std::vector<pthread_t>threads_write;
         std::vector<pthread_t>threads_read;
         rocksdb::WriteOptions wo;
-        write_threads_data* wtd;
         bool timer_alive=false;
 };
 

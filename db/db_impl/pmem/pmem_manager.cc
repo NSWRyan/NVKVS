@@ -6,7 +6,7 @@ using namespace std;
 pmem_manager::~pmem_manager(){
     if(initiated){
         close_pmem();
-        delete(db);
+        //delete(db);
     }
 }
 
@@ -16,8 +16,8 @@ pmem_manager::pmem_manager(){
 }
 
 // Initialize the pmem address
-int pmem_manager::open_pmem(u_short nThread, bool start_new){
-    if ((fd = open("/dev/dax0.1", O_RDWR)) < 0) {
+int pmem_manager::open_pmem(u_short nThread, bool start_new, string dir){
+    if ((fd = open(dir.c_str(), O_RDWR)) < 0) {
         printf("Open failed;");
         perror("open");
         exit(1);
@@ -90,13 +90,13 @@ int pmem_manager::close_pmem(){
 // offsets[1+n*2] = write continue offset, offset_current
 int pmem_manager::init_pmem(u_short nThread){
     // total_write is the size of the header
-    long total_write=1;
+    u_long total_write=1;
     pmem_addr[0]='1';
     // Total write + 1 byte
     memcpy(pmem_addr+1,&nThread,2);
     total_write+=2;
     // Total write + 2 bytes;
-    offsets=(long*)(pmem_addr+3);
+    offsets=(u_long*)(pmem_addr+3);
     // Offset sizes (3 longs)
     total_write+=32;
     // Size for each partition, -1 is to ensure that no overcapacity writes
@@ -131,7 +131,7 @@ int pmem_manager::load_header(u_short nThread){
     };
     
     // Load the offsets
-    offsets=(long*)(pmem_addr+3);
+    offsets=(u_long*)(pmem_addr+3);
 
     // Now fill in the offset_helper for each threads.
     // The start position
@@ -199,7 +199,7 @@ void pmem_manager::insertJS(rocksdb::job_struct* js){
 
 
 
-void pmem_manager::persist(long insert_offset, long length){
+void pmem_manager::persist(u_long insert_offset, size_t length){
     persist_fn(pmem_addr+insert_offset,length);
 }
 

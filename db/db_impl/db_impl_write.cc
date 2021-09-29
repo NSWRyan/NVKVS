@@ -20,17 +20,29 @@ namespace ROCKSDB_NAMESPACE {
 // Convenience methods
 Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
                    const Slice& key, const Slice& val) {
-  job_struct* js=new job_struct(key.data(),key.size(),val.data(),val.size());
+  if(key.size_<1)
   if(!o.disableWAL){
       if(column_family->GetID())
-        std::cout<<"";
+        //if(js->status)
+        if(val.size_<1)
+          std::cout<<"";
   }
+  WriteBatch batch(key.size() + 6 + 24);
+  job_struct* js=new job_struct(key.data(),key.size(),val.data(),val.size());
   put_custom(js);
-  long offset=js->offset;
-  //delete(js);
-  WriteBatch batch(key.size() + 8 + 24);
-  batch.Put2(key, string((char*)(&(offset)),8));
-  return Write(o, &batch);
+  // std::cout<<"dimm "<<js->dimm<<endl;
+  // std::cout<<"offset "<<js->offset<<endl;
+  // Offset codes;
+  // char* offset=(char*)malloc(6);
+  // memcpy(offset,&(js->offset),6); 
+  // offset[5]=offset[5]|(js->dimm<<5);
+  // batch.Put2(key, Slice(offset,6));
+  // free(offset);
+  // delete(js);
+  // // u_long offset=0;
+  // // batch.Put2(key, Slice((char*)(&(offset)),6));
+  // return Write(o, &batch);
+  return Status::OK();//Write(o, &batch);
   //@PLASTA
   // 8 byte is the offset length
   /*  
@@ -42,7 +54,7 @@ Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
     Status s = batch.Put(key, val);
     return Write(o, &batch);*/
   // Original
-  // return DB::Put(o, column_family, key, val);
+  // return DB::Put(o, column_family, key, Slice((char*)(&(offset)),6));
 }
 
 Status DBImpl::Merge(const WriteOptions& o, ColumnFamilyHandle* column_family,

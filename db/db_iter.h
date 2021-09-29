@@ -170,7 +170,7 @@ class DBIter final : public Iterator {
       return pinned_value_;
     } else {
       // Plasta return the value
-      if(iter_.value().size_==8){
+      if(iter_.value().size_==6){
         // In PMEM
         return db_impl_->get_custom(iter_.value().data());
       }else if(iter_.value().size_==1){

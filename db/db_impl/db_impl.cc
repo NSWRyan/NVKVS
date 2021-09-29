@@ -491,6 +491,42 @@ void DBImpl::CancelAllBackgroundWork(bool wait) {
 }
 
 Status DBImpl::CloseHelper() {
+  // Plasta stop here before closing such that all jobs are done before continuing.
+  // std::cout<<0<<std::endl;
+  // if(jt0!=NULL){
+  //   std::cout<<1<<std::endl;
+  //   delete(jt0);
+  //   std::cout<<2<<std::endl;
+  //   delete(pman0);
+  //   if(dual_writer){
+  //     std::cout<<3<<std::endl;
+  //     delete(jt1);
+  //     std::cout<<4<<std::endl;
+  //     delete(pman1);
+  //   }
+  // }
+  
+  if(jt0!=NULL){
+    jt0->finished=true;
+    for (int i=0;i<nThreadWrite;i++){
+      while(!(jt0->wtd[i].status)){
+        std::cout<<"";
+      }
+    }
+    delete(jt0);
+    delete(pman0);
+    if(dual_writer){
+      jt1->finished=true;
+      for (int i=0;i<nThreadWrite;i++){
+        while(!(jt1->wtd[i].status)){
+          std::cout<<"";
+        }
+      }
+      delete(jt1);
+      delete(pman1);
+    }
+    std::cout<<"closing done"<<std::endl;
+  }
   // Guarantee that there is no background error recovery in progress before
   // continuing with the shutdown
   mutex_.Lock();
@@ -658,8 +694,6 @@ Status DBImpl::CloseHelper() {
 Status DBImpl::CloseImpl() { return CloseHelper(); }
 
 DBImpl::~DBImpl() {
-  delete(jt);
-  delete(pman);
   if (!closed_) {
     closed_ = true;
     CloseHelper().PermitUncheckedError();
@@ -1783,7 +1817,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
     if (s.ok()) {
       if (get_impl_options.get_value) {
         // Plasta get the data from pmem here
-        if(get_impl_options.value->size()==8){
+        if(get_impl_options.value->size()==6){
           get_impl_options.value->PinSelf(get_custom(get_impl_options.value->data()));
         }
         //get_impl_options.value->PinSelf("Modified value.");

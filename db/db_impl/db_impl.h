@@ -145,17 +145,24 @@ class DBImpl : public DB {
   void operator=(const DBImpl&) = delete;
   //Plasta
   // The pmem_manager
-  pmem_manager* pman;
+  pmem_manager* pman0;
+  pmem_manager* pman1;
+  u_long mask = (1UL<<45)-1;
+  u_long pmem_insertion=0;
 
   // The job manager for separated key value
-  job_threads* jt;
+  job_threads* jt0;
+  job_threads* jt1;
 
   // Nthread for pmem
   u_short nThreadWrite=5;
   u_short nThreadRead=5;
 
   // PMEM
-  bool pmem;
+  bool pmem=false;
+  bool dual_writer=false;
+  std::string dimm_dir0;
+  std::string dimm_dir1;
 
   virtual ~DBImpl();
 

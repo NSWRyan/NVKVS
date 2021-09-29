@@ -20,10 +20,11 @@ int job_threads::init(u_short threadCount_write, u_short threadCount_read, pmem_
     throttle=false;
     timer_lock=false;
     slow_down=1000;
-    buffer_high_threshold=1000000000;
-    buffer_low_threshold=500000000;
+    buffer_high_threshold=100000000;
+    buffer_low_threshold=buffer_high_threshold/2;
     list_capacity=1000000;
     timerus=1000;
+    wait_count=0;
     current_buffer_size=0;
     // Allocate the buffers
     workQueue_w=(rocksdb::job_struct**)malloc(sizeof(rocksdb::job_struct*)*list_capacity);
@@ -112,6 +113,7 @@ int job_threads::init(u_short threadCount_write, u_short threadCount_read, pmem_
 job_threads::~job_threads()
 {
     if(initiated){
+        std::cout<<"Closing start"<<std::endl;
         finished = true;
         usleep(timerus);
 
@@ -188,7 +190,7 @@ job_threads::~job_threads()
         {
             delete *loop;
         }
-
+        cout<<"total write "<<total_w_count<<endl;
         delete[](wtd);
         delete(workQueue_w);
         initiated=false;
@@ -204,15 +206,16 @@ void job_threads::addWork_write(rocksdb::job_struct *job)
     b_cond_w=true;
     // Insert into the buffer
     workQueue_w[w_count]=job;
+    w_count++;
     current_buffer_size+=job->total_length;
     job->offset=this_pman->current_offset.offset_current;
     this_pman->current_offset.offset_current+=job->total_length;
     job->status=true;
-    w_count++;
+    total_w_count++;
     b_cond_w=false;
     if(throttle){
         // Sleep for 1000 ms when insert is too slow
-        job->throttle=true;
+        //job->throttle=true;
     }
 }
 
@@ -246,7 +249,7 @@ void job_threads::workerStart_write(u_short thread_id)
                 //rocksdb::WriteBatch wb_in(jobs->wb_size);
                 for(int i=0;i<jobs->n_jobs;i++){
                     // Write into PMem
-                    this_pman->insertJS(jobs->jobs[i]);
+                    //this_pman->insertJS(jobs->jobs[i]);
                     // Insert into write batch for the LSM-tree
                     //wb_in.Put2(jobs->jobs[i]->key,string((char*)(&(jobs->jobs[i]->offset)),8));
                 }
@@ -262,19 +265,18 @@ void job_threads::workerStart_write(u_short thread_id)
                 if(this_pman->offsets[2]<jobs->new_offset){
                     this_pman->offsets[2]=jobs->new_offset;
                 }
-
                 delete(jobs);
-                
             }
         }
-        {
+        {// Insert last data
             if(finished&&thread_id==0&&w_count>0){
+                std::cout<<"Thread "<<thread_id<<"quitting"<<endl;
                 batch_job* jobs = getJob_w(thread_id);
                 if(jobs!=NULL){
                     //rocksdb::WriteBatch wb_in(jobs->wb_size);
                     for(int i=0;i<jobs->n_jobs;i++){
                         // Write into PMem
-                        this_pman->insertJS(jobs->jobs[i]);
+                        //this_pman->insertJS(jobs->jobs[i]);
                         // Insert into write batch for the LSM-tree
                         //wb_in.Put2(jobs->jobs[i]->key,string((char*)(&(jobs->jobs[i]->offset)),8));
                     }
@@ -295,6 +297,8 @@ void job_threads::workerStart_write(u_short thread_id)
             }
         }
     }
+    std::cout<<"Thread "<<thread_id<<"quitting"<<endl;
+    wtd[thread_id].status=true;
 }
 
 // This is the main worker loop for read.
@@ -324,13 +328,18 @@ void job_threads::timerStart_write()
             cout<<"";
         }
         // Throttle write when buffer is full
-        if(current_buffer_size>buffer_high_threshold){
-            throttle=true;
-        }else if(throttle && current_buffer_size<=buffer_low_threshold){
-            throttle=false;
+        if(wait_count>0){
+            // Some workers are idle, so wake them up
+            pthread_cond_signal(&cond_w);
+        }else{
+            // No available worker so possible congestion 
+            if(current_buffer_size>buffer_high_threshold){
+                throttle=true;
+            }else {
+                throttle=false;
+            }
         }
         timer_lock=true;
-        pthread_cond_signal(&cond_w);
     }
 }
 
@@ -343,6 +352,7 @@ batch_job* job_threads::getJob_w(u_short thread_id)
     //long new_offset=0;
     {   // Lock region, do as few as possible here
         MutexLock lock(mutex_w);
+        wait_count++;
         b_cond_w=true;
         while((!timer_lock) && (!finished))
         {
@@ -390,6 +400,7 @@ batch_job* job_threads::getJob_w(u_short thread_id)
         }
         // Release the write lock
         b_cond_w=false;
+        wait_count--;
     }   // Lock region end
 
     batch_job* result=NULL;
