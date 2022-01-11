@@ -197,6 +197,9 @@ void pmem_manager::insertJS(rocksdb::job_struct* js){
     memcpy(pmem_addr+js->offset+4+js->key_length,js->value, js->value_length);
 }
 
+void pmem_manager::insertManual(char* data, long length, long i_offset){
+    memcpy(pmem_addr+i_offset,data,length);
+}
 
 
 void pmem_manager::persist(u_long insert_offset, size_t length){

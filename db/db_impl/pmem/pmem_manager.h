@@ -108,6 +108,7 @@ class pmem_manager{
     long insertST(string key, u_short key_length, string value, u_short value_length);
     void insertNT(const char* key, u_short key_length, const char* value, u_short value_length, long write_offset);
     void insertBatch(rocksdb::WriteBatch* wb);
+    void insertManual(char* data, long length, long i_offset);
     void insertJS(rocksdb::job_struct* js);
     void persist(u_long insert_offset, size_t length);
     

@@ -43,8 +43,13 @@ struct batch_helper{
 
 struct batch_job{
     int n_jobs;
+
+    // The size of write batch for the LSM-tree insertion
     int wb_size;
-    long total_write_byte;
+
+    long total_write_byte=0;
+
+    // new_offset is the new write offset after this batch_job 
     u_long new_offset;
     rocksdb::job_struct** jobs;
     batch_job(int i_n_jobs){
@@ -52,13 +57,17 @@ struct batch_job{
         wb_size=0;
         total_write_byte=0;
         new_offset=0;
-        jobs=(rocksdb::job_struct**)malloc(sizeof(rocksdb::job_struct*)*i_n_jobs);
+        // No need to malloc now 0111
+        //jobs=(rocksdb::job_struct**)malloc(sizeof(rocksdb::job_struct*)*i_n_jobs);
     };
     ~batch_job(){
-        for(int i=0;i<n_jobs;i++){
-            delete(jobs[i]);
-        }
-        delete(jobs);
+        // Deprecated 0111 now deleted after copied.
+        // Free the memory from the jobs.
+        // for(int i=0;i<n_jobs;i++){
+        //     delete(jobs[i]);
+        // }
+        // No need to delete jobs because jobs is now reused for future write batch job. 0111
+        //delete(jobs);
     };
 };
 
@@ -108,6 +117,7 @@ class job_threads
         write_threads_data* wtd;
         bool finished;   // Threads will re-wait while this is true.
         u_short wait_count;
+        bool memory_buffer=false;
 
     private:
         friend void* job_threads_Start(void*);

@@ -65,11 +65,14 @@ struct job_struct{
     u_short key_length;
     
     char *value;
+    char *whole_data;
     u_short value_length;
+    u_short * p_length;
     // This is used for the LSM-tree insertion
     int total_length_separated;
     // This is used for the PMEM insertion
     int total_length;
+    // Start write offset
     long offset;
     bool status;
     bool throttle;
@@ -82,14 +85,30 @@ struct job_struct{
       total_length=4 + i_key_length + i_value_length;
       key_length=i_key_length;
       value_length=i_value_length;
-      key=(char*)malloc(key_length);
-      value=(char*)malloc(i_value_length);
-      memcpy(key,i_key,key_length);
-      memcpy(value,i_value,value_length);
+      // Deprecated Old method 0111
+      // key=(char*)malloc(key_length);
+      // value=(char*)malloc(i_value_length);
+      // memcpy(key,i_key,key_length);
+      // memcpy(value,i_value,value_length);
+
+      // Reduce the memcpy count by using address instead.
+      whole_data=(char*)malloc(total_length);
+      p_length=(u_short*)whole_data;
+      // byte 0 and 1 for k length
+      p_length[0]=i_key_length;
+      // byte 2 and 3 for v length
+      p_length[1]=i_value_length;
+      // copy the key and value so that it wont expired 
+      // because it will be batched to reduce overhead
+      memcpy(whole_data+4,i_key,key_length);
+      memcpy(whole_data+4+key_length,i_value,value_length);
     }
     ~job_struct(){
-      free(key);
-      free(value);
+      // Free the allocated memory
+      free(whole_data);
+      // Deprecated, now key and value is in whole_data. 0111
+      // free(key);
+      // free(value);
     }
 };
 
@@ -114,8 +133,10 @@ class WriteBatch : public WriteBatchBase {
   // Store the mapping "key->value" in the database.
   Status Put(ColumnFamilyHandle* column_family, const Slice& key,
              const Slice& value) override;
+
+  // Plasta
+  // Custom put, the original put is now Put2
   Status Put(const Slice& key, const Slice& value) override {
-    // Plasta
     job_struct* js=new job_struct(key.data(),key.size(),value.data(),value.size());
     total_write+=js->total_length;
     total_write_rdb+=js->total_length_separated;
@@ -135,6 +156,7 @@ class WriteBatch : public WriteBatchBase {
     return Put(nullptr, key, value);
   }
 
+  // The original, non-modified Put
   using WriteBatchBase::Put2;
   Status Put2(const Slice& key, const Slice& value) override {
     return Put(nullptr, key, value);

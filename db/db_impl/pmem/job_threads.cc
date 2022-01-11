@@ -231,87 +231,12 @@ void job_threads::addWork_write_batch(rocksdb::WriteBatch *job)
     b_cond_w=false;
 }
 
+// Deprecated
 void job_threads::addWork_read(job_pointer *job)
 {
     MutexLock lock(mutex_r);
     workQueue_r.push_back(job);
     pthread_cond_signal(&cond_r);
-}
-
-// This is the main worker loop for write.
-void job_threads::workerStart_write(u_short thread_id)
-{
-    while(!finished)
-    {
-        {
-            batch_job* jobs = getJob_w(thread_id);
-            if(jobs!=NULL){
-                //rocksdb::WriteBatch wb_in(jobs->wb_size);
-                for(int i=0;i<jobs->n_jobs;i++){
-                    // Write into PMem
-                    //this_pman->insertJS(jobs->jobs[i]);
-                    // Insert into write batch for the LSM-tree
-                    //wb_in.Put2(jobs->jobs[i]->key,string((char*)(&(jobs->jobs[i]->offset)),8));
-                }
-                // Write into the LSM-tree
-                //wb_in.pmem_init=true;
-                //DBI->Write(wo,&wb_in);
-
-                // Persist the data
-                long start_offset=jobs->jobs[0]->offset;
-                this_pman->persist(start_offset,jobs->total_write_byte);
-
-                // Manage the offset in PMem if not managed yet
-                if(this_pman->offsets[2]<jobs->new_offset){
-                    this_pman->offsets[2]=jobs->new_offset;
-                }
-                delete(jobs);
-            }
-        }
-        {// Insert last data
-            if(finished&&thread_id==0&&w_count>0){
-                std::cout<<"Thread "<<thread_id<<"quitting"<<endl;
-                batch_job* jobs = getJob_w(thread_id);
-                if(jobs!=NULL){
-                    //rocksdb::WriteBatch wb_in(jobs->wb_size);
-                    for(int i=0;i<jobs->n_jobs;i++){
-                        // Write into PMem
-                        //this_pman->insertJS(jobs->jobs[i]);
-                        // Insert into write batch for the LSM-tree
-                        //wb_in.Put2(jobs->jobs[i]->key,string((char*)(&(jobs->jobs[i]->offset)),8));
-                    }
-                    // Write into the LSM-tree
-                    //wb_in.pmem_init=true;
-                    //DBI->Write(wo,&wb_in);
-
-                    // Persist the data
-                    long start_offset=jobs->jobs[0]->offset;
-                    this_pman->persist(start_offset,jobs->total_write_byte);
-
-                    // Manage the offset in PMem if not managed yet
-                    if(this_pman->offsets[2]<jobs->new_offset){
-                        this_pman->offsets[2]=jobs->new_offset;
-                    }
-                    delete(jobs);
-                }
-            }
-        }
-    }
-    std::cout<<"Thread "<<thread_id<<"quitting"<<endl;
-    wtd[thread_id].status=true;
-}
-
-// This is the main worker loop for read.
-void job_threads::workerStart_read()
-{
-    while(!finished)
-    {
-        job_pointer* job = getJob_r();
-        if(job!=NULL){
-            this_pman->readSTNC(job);
-            job->status=true;
-        }
-    }
 }
 
 
@@ -342,11 +267,136 @@ void job_threads::timerStart_write()
         timer_lock=true;
     }
 }
+// This is the main worker loop for write.
+void job_threads::workerStart_write(u_short thread_id)
+{
+    while(!finished)
+    {
+        {
+            batch_job* jobs = getJob_w(thread_id);
+            if(jobs!=NULL){
+                // For manual insertion to the LSM tree.
+                //rocksdb::WriteBatch wb_in(jobs->wb_size);
+
+                // Get the start_offset of this write job.
+                long start_offset=jobs->jobs[0]->offset;
+                // Memory buffer reduces the # of memcpy to the pmem to accelerate the sequential write
+                if(memory_buffer){
+                    char* temporary_buffer=(char*)malloc(jobs->total_write_byte);
+                    long cur_pos=0;
+
+                    // Iterate the jobs and insert to the buffer
+                    for(int i=0;i<jobs->n_jobs;i++){
+                        // Write into the buffer
+                        mempcpy(temporary_buffer+cur_pos,jobs->jobs[i]->whole_data,jobs->jobs[i]->total_length);
+                        // Update the cursor
+                        cur_pos+=jobs->jobs[i]->total_length;
+                        // Free the memory
+                        delete(jobs->jobs[i]);
+                    }
+                    // Finally insert it as a whole data
+                    this_pman->insertManual(temporary_buffer,jobs->total_write_byte,start_offset);
+                    // Now clean the buffer
+                    free(temporary_buffer);
+                }else{
+                    // Iterate the jobs and insert to the pmem, cheaper on memory
+                    for(int i=0;i<jobs->n_jobs;i++){
+                        // Write into PMem
+                        this_pman->insertJS(jobs->jobs[i]);
+                        // Free the memory added on 0111 because deleting jobs wont delete the whole data
+                        delete(jobs->jobs[i]);
+
+                        // Insert into write batch for the LSM-tree
+                        //wb_in.Put2(jobs->jobs[i]->key,string((char*)(&(jobs->jobs[i]->offset)),8));
+                    }
+                }
+                // Write into the LSM-tree
+                //wb_in.pmem_init=true;
+                //DBI->Write(wo,&wb_in);
+
+                // Persist the data
+                this_pman->persist(start_offset,jobs->total_write_byte);
+
+                // Manage the offset in PMem if not managed yet
+                if(this_pman->offsets[2]<jobs->new_offset){
+                    this_pman->offsets[2]=jobs->new_offset;
+                }
+                delete(jobs);
+            }
+        }
+        {// Insert last data
+            if(finished&&thread_id==0&&w_count>0){
+                std::cout<<"Thread "<<thread_id<<"quitting"<<endl;
+                batch_job* jobs = getJob_w(thread_id);
+                if(jobs!=NULL){
+                    long start_offset=jobs->jobs[0]->offset;
+                    // Memory buffer reduces the # of memcpy to the pmem to accelerate the sequential write
+                    // This reduce the IO on Pmem, preferred for low value sizes
+                    if(memory_buffer){
+                        char* temporary_buffer=(char*)malloc(jobs->total_write_byte);
+                        long cur_pos=0;
+
+                        // Iterate the jobs and insert to the buffer
+                        for(int i=0;i<jobs->n_jobs;i++){
+                            // Write into the buffer
+                            mempcpy(temporary_buffer+cur_pos,jobs->jobs[i]->whole_data,jobs->jobs[i]->total_length);
+                            // Update the cursor
+                            cur_pos+=jobs->jobs[i]->total_length;
+                            // Free the memory
+                            delete(jobs->jobs[i]);
+                        }
+                        // Finally insert it as a whole data
+                        this_pman->insertManual(temporary_buffer,jobs->total_write_byte,start_offset);
+                        // Now clean the buffer
+                        free(temporary_buffer);
+                    }else{
+                        // Iterate the jobs and insert to the pmem, 
+                        // does not use as much memory, but incurs more IO on the Pmem
+                        for(int i=0;i<jobs->n_jobs;i++){
+                            // Write into PMem
+                            this_pman->insertJS(jobs->jobs[i]);
+                            // Free the memory added on 0111 because deleting jobs wont delete the whole data
+                            delete(jobs->jobs[i]);
+
+                            // Insert into write batch for the LSM-tree
+                            //wb_in.Put2(jobs->jobs[i]->key,string((char*)(&(jobs->jobs[i]->offset)),8));
+                        }
+                    }
+                    this_pman->persist(start_offset,jobs->total_write_byte);
+
+                    // Manage the offset in PMem if not managed yet
+                    if(this_pman->offsets[2]<jobs->new_offset){
+                        this_pman->offsets[2]=jobs->new_offset;
+                    }
+                    delete(jobs);
+                }
+            }
+        }
+    }
+    std::cout<<"Thread "<<thread_id<<"quitting"<<endl;
+    wtd[thread_id].status=true;
+}
+
+// This is the main worker loop for read.
+void job_threads::workerStart_read()
+{
+    while(!finished)
+    {
+        job_pointer* job = getJob_r();
+        if(job!=NULL){
+            this_pman->readSTNC(job);
+            job->status=true;
+        }
+    }
+}
+
 
 // Get a new job for the write thread
 batch_job* job_threads::getJob_w(u_short thread_id)
 {
+    // Temporary w_count, w_count is the # of insertions
     int t_w_count=0;
+    // Temporary current_buffer_size, which is the size of the current batch
     long t_current_buffer_size=0;
     //long start_offset=0;
     //long new_offset=0;
@@ -408,18 +458,26 @@ batch_job* job_threads::getJob_w(u_short thread_id)
     if (t_w_count>0)
     {   
         result=new batch_job(t_w_count);
-        result->new_offset=wtd[thread_id].buffer[t_w_count-1]->offset+wtd[thread_id].buffer[t_w_count-1]->total_length;
+        // Update the write offset after this batch job
+        result->new_offset = 
+            wtd[thread_id].buffer[t_w_count-1]->offset 
+            + 
+            wtd[thread_id].buffer[t_w_count-1]->total_length;
+        // Fill in the batch job total size in bytes.
         result->total_write_byte=t_current_buffer_size;
-
-        for(int i=0;i<t_w_count;i++){
-            // Insert into the batch_job
-            result->jobs[i]=wtd[thread_id].buffer[i];
-            result->wb_size+=wtd[thread_id].buffer[i]->total_length_separated;
-        }
+        result->jobs = wtd[thread_id].buffer;
+        // Old and inefficient because it needs to iterate everything. 0111
+        // for(int i=0;i<t_w_count;i++){
+        //     // Insert into the batch_job
+        //     result->jobs[i]=wtd[thread_id].buffer[i];
+        //     // Only for insertion to LSM tree in the writer thread
+        //     //result->wb_size+=wtd[thread_id].buffer[i]->total_length_separated;
+        // }
     }
     return result;
 }
 
+// Deprecated 0111
 // Get a new job for the read thread
 job_pointer* job_threads::getJob_r()
 {
