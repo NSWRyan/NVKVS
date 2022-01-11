@@ -342,7 +342,7 @@ void job_threads::workerStart_write(u_short thread_id)
                             mempcpy(temporary_buffer+cur_pos,jobs->jobs[i]->whole_data,jobs->jobs[i]->total_length);
                             // Update the cursor
                             cur_pos+=jobs->jobs[i]->total_length;
-                            // Free the memory
+                            // Free the memory 0111
                             delete(jobs->jobs[i]);
                         }
                         // Finally insert it as a whole data
