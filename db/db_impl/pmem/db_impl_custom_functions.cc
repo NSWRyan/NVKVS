@@ -142,13 +142,22 @@ void DBImpl::put_custom_wb(WriteBatch* the_batch){
 }
 
 Slice DBImpl::get_custom(const char *string_offset){
-    // Plasta get the data from pmem here
-    u_short dimm=(string_offset[5]>>5)&0x07;
-    u_long offset;
-    memcpy(&offset,string_offset,6);
+    // Deprecated 0112
+    // // Plasta get the data from pmem here
+    // u_short dimm=(string_offset[5]>>5)&0x07;
+    // u_long offset;
+    // memcpy(&offset,string_offset,6);
+
+    // string_offset is 6 byte, convert it to u_long 8 byte here
+    u_long offset=((u_long*)string_offset)[0];
+    // Remove the byte 6 and 7, u_short is 2 byte
+    u_short* mod=(u_short*)&offset;
+    mod[3]=0;
 
     job_pointer jp;
-    jp.offset=offset&mask;
+    // Deprecated 0112
+    // jp.offset=offset&mask;
+    jp.offset=offset;
     jp.status=false;
     // std::cout<<"read dimm "<<dimm<<std::endl;
     // std::cout<<"read offset "<<jp.offset<<std::endl;

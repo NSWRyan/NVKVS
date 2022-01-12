@@ -30,6 +30,9 @@ Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
   WriteBatch batch(key.size() + 6 + 24);
   job_struct* js=new job_struct(key.data(),key.size(),val.data(),val.size());
   put_custom(js);
+  return DB::Put(o, column_family, key, Slice((char*)(&(js->offset)),6));
+  // Use this if do not want to write to LSM.
+  //return Status::OK();//Write(o, &batch);
   // std::cout<<"dimm "<<js->dimm<<endl;
   // std::cout<<"offset "<<js->offset<<endl;
   // Offset codes;
@@ -42,7 +45,6 @@ Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
   // // u_long offset=0;
   // // batch.Put2(key, Slice((char*)(&(offset)),6));
   // return Write(o, &batch);
-  return Status::OK();//Write(o, &batch);
   //@PLASTA
   // 8 byte is the offset length
   /*  

@@ -73,7 +73,7 @@ struct job_struct{
     // This is used for the PMEM insertion
     int total_length;
     // Start write offset
-    long offset;
+    u_long offset;
     bool status;
     bool throttle;
     u_short dimm;
