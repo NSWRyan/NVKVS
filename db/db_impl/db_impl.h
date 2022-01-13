@@ -148,7 +148,8 @@ class DBImpl : public DB {
   pmem_manager* pman0;
   pmem_manager* pman1;
   u_long mask = (1UL<<45)-1;
-  u_long pmem_insertion=0;
+  u_long pmem_insertion0=0;
+  u_long pmem_insertion1=0;
 
   // The job manager for separated key value
   job_threads* jt0;

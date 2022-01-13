@@ -17,6 +17,7 @@ pmem_manager::pmem_manager(){
 
 // Initialize the pmem address
 int pmem_manager::open_pmem(u_short nThread, bool start_new, string dir){
+    pmem_dir=dir;
     if ((fd = open(dir.c_str(), O_RDWR)) < 0) {
         printf("Open failed;");
         perror("open");
@@ -69,13 +70,13 @@ int pmem_manager::close_pmem(){
     // Update the offset and persist it.
     offsets[2]=current_offset.offset_current;
     persist_fn(offsets+3,8*4);
-    cout<<"Start pos"<<endl;
+    cout<<pmem_dir<<" Start pos"<<endl;
     cout<<offsets[0]<<endl;
-    cout<<"last GC pos"<<endl;
+    cout<<pmem_dir<<" last GC pos"<<endl;
     cout<<offsets[1]<<endl;
-    cout<<"last write pos"<<endl;
+    cout<<pmem_dir<<" last write pos"<<endl;
     cout<<offsets[2]<<endl;
-    cout<<"max write"<<endl;
+    cout<<pmem_dir<<" max write"<<endl;
     cout<<offsets[3]<<endl;
 
     pmem2_map_delete(&map);
@@ -180,9 +181,9 @@ void pmem_manager::insertNT(const char* key, u_short key_length, const char* val
 }
 
 void pmem_manager::insertBatch(rocksdb::WriteBatch* wb){
-    size_t v_size=wb->writebatch_data->size();
+    size_t v_size=wb->writebatch_data.size();
     for(size_t i=0;i<v_size;i++){
-        rocksdb::job_struct* js=wb->writebatch_data->at(i);
+        rocksdb::job_struct* js=wb->writebatch_data.at(i);
         memcpy(pmem_addr+js->offset,&(js->key_length),2);
         memcpy(pmem_addr+js->offset+2,&(js->value_length),2);
         memcpy(pmem_addr+js->offset+4,js->key,js->key_length);

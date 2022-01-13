@@ -20,6 +20,10 @@ namespace ROCKSDB_NAMESPACE {
 // Convenience methods
 Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
                    const Slice& key, const Slice& val) {
+
+  // Debug
+  cout<<key.data_<<endl;
+  // Debug end
   if(key.size_<1)
   if(!o.disableWAL){
       if(column_family->GetID())
@@ -28,9 +32,13 @@ Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
           std::cout<<"";
   }
   WriteBatch batch(key.size() + 6 + 24);
+  // JS is created here and deleted by the writer thread when completed.
   job_struct* js=new job_struct(key.data(),key.size(),val.data(),val.size());
   put_custom(js);
-  return DB::Put(o, column_family, key, Slice((char*)(&(js->offset)),6));
+  u_long insert_offset=js->offset;
+  u_short* dimm=(u_short*)&(insert_offset);
+  dimm[3]=js->dimm;
+  return DB::Put(o, column_family, key, Slice((char*)(&(insert_offset)),8));
   // Use this if do not want to write to LSM.
   //return Status::OK();//Write(o, &batch);
   // std::cout<<"dimm "<<js->dimm<<endl;
@@ -87,18 +95,19 @@ void DBImpl::SetRecoverableStatePreReleaseCallback(
 
 Status DBImpl::Write(const WriteOptions& write_options, WriteBatch* my_batch) {
   // PLASTA
-  /*if(!my_batch->pmem_init){
+  if(!my_batch->pmem_init){
     put_custom_wb(my_batch);
     if(write_options.disableWAL){}
     // To do move the batch to from the vector back to batch
     
-    int v_size=my_batch->writebatch_data->size();
-    for(int i=0;i<v_size;i++){
-      job_struct* temp_js=my_batch->writebatch_data->at(i);
-      my_batch->Put2(temp_js->key, string((char*)&(temp_js->offset),8));
+    for(job_struct* js:my_batch->writebatch_data){
+      u_long insert_offset=js->offset;
+      u_short* dimm=(u_short*)&(insert_offset);
+      dimm[3]=js->dimm;
+      my_batch->Put2(Slice(js->key,js->key_length), Slice((char*)&(insert_offset),8));
     }
-    return Status::OK();
-  }*/
+  }
+  // return Status::OK();
   return WriteImpl(write_options, my_batch, nullptr, nullptr);
 }
 

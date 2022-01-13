@@ -14,9 +14,12 @@ void DBImpl::load_pmem(bool new_old){
     jt1=NULL;
     pman0=NULL;
     pman1=NULL;
+    // Default values
     bool batchedBatch=true;
-    int batchSize=10000000;
-    bool pipelinedWrite=false;
+    int batchSize=100000000;
+    int batchTimer=1000;
+    bool memory_buffer=true;
+    dimm_dir0="/dev/dax0.1";
     ifstream main_file("/home/ryan/RyanProject1/rdbshared/config");
     string conf_input;
     getline(main_file,conf_input); // Run PMEM or WiscKey
@@ -26,37 +29,32 @@ void DBImpl::load_pmem(bool new_old){
     nThreadRead = stoi(conf_input);
     // New config handler
     if(getline(main_file,conf_input)){ // the batchedBatch
-        batchSize = stoi(conf_input);
-        if(batchSize==0){
+        if(stoi(conf_input)==0){
             batchedBatch=false;
         }
 
         getline(main_file,conf_input); // the batchSize
         batchSize = stoi(conf_input);
 
-        getline(main_file,conf_input); // the pipelined write
-        int i_pw=stoi(conf_input);
-        if(i_pw==1){
-            pipelinedWrite=true;
+        getline(main_file,conf_input); // the batchTimer
+        batchTimer = stoi(conf_input);
+
+        getline(main_file,conf_input); // the memory_buffer
+        if(stoi(conf_input)==0){
+            memory_buffer=false;
         }
     }
-    int temp;
     // Dual writer new configs
     if(getline(main_file,conf_input)){ 
-        temp=stoi(conf_input); // Dual writer enable
-        if(temp==1){
+        if(stoi(conf_input)==1){
             dual_writer=true;
         }
         getline(main_file,dimm_dir0);
         getline(main_file,dimm_dir1);
+    }else{
+        getline(main_file,dimm_dir0);
     }
 
-    getline(main_file,conf_input); // Pipelined write
-    temp=stoi(conf_input);
-    if(temp==1){
-        pipelinedWrite=true;
-    }
-    // Pipelined write is a future feature.
 
     //Second load the PMem managers
     // Now load the first PMem managers
@@ -72,20 +70,24 @@ void DBImpl::load_pmem(bool new_old){
         pman0->open_pmem(nThreadWrite,false,dimm_dir0);
     }
     pman0->DBI=this;
+
+    std::cout<<"batchedBatch "<<batchedBatch<<std::endl;
+    std::cout<<"batchSize "<<batchSize<<std::endl;
+    std::cout<<"batchTimer "<<batchTimer<<std::endl;
+    std::cout<<"memory_buffer "<<memory_buffer<<std::endl;
+
     jt0=new job_threads();
     jt0->init(nThreadWrite, nThreadRead, pman0);
     jt0->batchedBatch=batchedBatch;
-    jt0->batchSize=batchSize;
-    jt0->pipelinedWrite=pipelinedWrite;
-    std::cout<<"batchedBatch "<<batchedBatch<<std::endl;
-    std::cout<<"batchSize "<<batchSize<<std::endl;
-    std::cout<<"pipelinedWrite "<<pipelinedWrite<<std::endl;
+    jt0->buffer_high_threshold=batchSize;
+    jt0->timerus=batchTimer;
+    jt0->memory_buffer=memory_buffer;
+    std::cout<<"Loaded PMEM0 at"<<dimm_dir0<<std::endl;
 
     if(dual_writer){
         // Init the other DIMM
         cout<<"PMEM1 is opened with ";
         cout<<nThreadWrite<<" write and "<<nThreadRead<<" read."<<endl;
-        main_file.close();
         pman1=new pmem_manager();
         if(new_old){
             std::cout<<"new DB"<<std::endl;
@@ -94,15 +96,16 @@ void DBImpl::load_pmem(bool new_old){
             std::cout<<"old DB"<<std::endl;
             pman1->open_pmem(nThreadWrite,false,dimm_dir1);
         }
+
         pman1->DBI=this;
         jt1=new job_threads();
         jt1->init(nThreadWrite, nThreadRead, pman1);
         jt1->batchedBatch=batchedBatch;
-        jt1->batchSize=batchSize;
-        jt1->pipelinedWrite=pipelinedWrite;
-        std::cout<<"batchedBatch "<<batchedBatch<<std::endl;
-        std::cout<<"batchSize "<<batchSize<<std::endl;
-        std::cout<<"pipelinedWrite "<<pipelinedWrite<<std::endl;
+        jt1->buffer_high_threshold=batchSize;
+        jt1->timerus=batchTimer;
+        jt1->memory_buffer=memory_buffer;
+        std::cout<<"Loaded PMEM1 at"<<dimm_dir1<<std::endl;
+
     }
 
     std::cout<<"Init done "<<std::endl;
@@ -118,11 +121,13 @@ Slice DBImpl::put_custom(const char *key, u_short key_length, const char *value,
 
 void DBImpl::put_custom(job_struct* js){
     if(dual_writer){
-        if(pmem_insertion++%2==0){
+        if(pmem_insertion0<pmem_insertion1){
             // Insert into PMem0
+            pmem_insertion0++;
             jt0->addWork_write(js);
         }else{
             // Insert into PMem1
+            pmem_insertion1++;
             jt1->addWork_write(js);
             js->dimm=1;
         }
@@ -137,8 +142,19 @@ void DBImpl::put_custom(job_struct* js){
     //while(!js->status){cout<<"";}
 }
 void DBImpl::put_custom_wb(WriteBatch* the_batch){
-    jt0->addWork_write_batch(the_batch);
-    while(!the_batch->wb_status){cout<<"";}; // Wait until the job is done
+    if(dual_writer){
+        if(pmem_insertion0<pmem_insertion1){
+            // Insert into PMem0
+            pmem_insertion0+=the_batch->writebatch_data.size();
+            jt0->addWork_write_batch(the_batch,0);
+        }else{
+            // Insert into PMem1
+            pmem_insertion1+=the_batch->writebatch_data.size();
+            jt1->addWork_write_batch(the_batch,1);
+        }
+    }else{
+            jt0->addWork_write_batch(the_batch,0);
+    }
 }
 
 Slice DBImpl::get_custom(const char *string_offset){
@@ -150,9 +166,13 @@ Slice DBImpl::get_custom(const char *string_offset){
 
     // string_offset is 6 byte, convert it to u_long 8 byte here
     u_long offset=((u_long*)string_offset)[0];
-    // Remove the byte 6 and 7, u_short is 2 byte
     u_short* mod=(u_short*)&offset;
+    // Byte 6 and 7 is u_short for the dimm.
+    u_short dimm=mod[3];
+    // Remove the byte 6 and 7, u_short is 2 byte
     mod[3]=0;
+    cout<<"read dimm "<<dimm<<endl;
+    cout<<"read offset "<<offset<<endl;
 
     job_pointer jp;
     // Deprecated 0112

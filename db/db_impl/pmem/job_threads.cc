@@ -204,30 +204,43 @@ void job_threads::addWork_write(rocksdb::job_struct *job)
 {
     MutexLock lock(mutex_w);
     b_cond_w=true;
+    if(batchedBatch){
     // Insert into the buffer
-    workQueue_w[w_count]=job;
-    w_count++;
-    current_buffer_size+=job->total_length;
-    job->offset=this_pman->current_offset.offset_current;
-    this_pman->current_offset.offset_current+=job->total_length;
-    job->status=true;
-    total_w_count++;
+        job->offset=this_pman->current_offset.offset_current;
+        this_pman->current_offset.offset_current+=job->total_length;
+        job->status=true;
+        workQueue_w[w_count]=job;
+        current_buffer_size+=job->total_length;
+        w_count++;
+        total_w_count++;
+    }else{
+        // Manual insertion by thread
+        // Very slow
+        this_pman->insertJS(job);
+    }
     b_cond_w=false;
     if(throttle){
         // Sleep for 1000 ms when insert is too slow
-        //job->throttle=true;
+        job->throttle=true;
     }
 }
 
 // Add a new job to the queue
 // Signal the condition variable. This will flush a waiting worker
 // otherwise the job will wait for a worker to finish processing its current job.
-void job_threads::addWork_write_batch(rocksdb::WriteBatch *job)
+void job_threads::addWork_write_batch(rocksdb::WriteBatch *job, u_short dimm)
 {
     MutexLock lock(mutex_w);
     b_cond_w=true;
-    workQueue_w_batch.push_back(job);
-    pthread_cond_signal(&cond_w);
+    for(rocksdb::job_struct* job_j : job->writebatch_data){
+        job_j->offset=this_pman->current_offset.offset_current;
+        this_pman->current_offset.offset_current+=job_j->total_length;
+        workQueue_w[w_count]=job_j;
+        current_buffer_size+=job->total_write;
+        job_j->dimm=dimm;
+        w_count++;
+        total_w_count++;
+    }
     b_cond_w=false;
 }
 
@@ -246,11 +259,13 @@ void job_threads::timerStart_write()
     while(timer_alive)
     {
         usleep(timerus);
-        while (b_cond_w){
-            if(finished){
-                break;
-            }
-            cout<<"";
+        // Timer loc deprecated 0113
+        // while (b_cond_w){
+        //     cout<<"";
+        // }
+
+        if(finished){
+            break;
         }
         // Throttle write when buffer is full
         if(wait_count>0){
@@ -266,6 +281,12 @@ void job_threads::timerStart_write()
         }
         timer_lock=true;
     }
+    // Close the threads
+    for(std::vector<pthread_t>::iterator loop = threads_write.begin();loop != threads_write.end(); ++loop)
+    {
+        // Send enough signals to free all threads.
+        pthread_cond_signal(&cond_w);
+    }
 }
 // This is the main worker loop for write.
 void job_threads::workerStart_write(u_short thread_id)
@@ -279,7 +300,7 @@ void job_threads::workerStart_write(u_short thread_id)
                 //rocksdb::WriteBatch wb_in(jobs->wb_size);
 
                 // Get the start_offset of this write job.
-                long start_offset=jobs->jobs[0]->offset;
+                u_long start_offset=jobs->jobs[0]->offset;
                 // Memory buffer reduces the # of memcpy to the pmem to accelerate the sequential write
                 if(memory_buffer){
                     char* temporary_buffer=(char*)malloc(jobs->total_write_byte);
@@ -294,10 +315,10 @@ void job_threads::workerStart_write(u_short thread_id)
                         // Free the memory
                         delete(jobs->jobs[i]);
                     }
-                    // Finally insert it as a whole data
                     this_pman->insertManual(temporary_buffer,jobs->total_write_byte,start_offset);
                     // Now clean the buffer
                     free(temporary_buffer);
+                        
                 }else{
                     // Iterate the jobs and insert to the pmem, cheaper on memory
                     for(int i=0;i<jobs->n_jobs;i++){
@@ -373,7 +394,7 @@ void job_threads::workerStart_write(u_short thread_id)
             }
         }
     }
-    std::cout<<"Thread "<<thread_id<<"quitting"<<endl;
+    std::cout<<this_pman->pmem_dir<<" Thread "<<thread_id<<" done."<<std::endl;
     wtd[thread_id].status=true;
 }
 

@@ -72,7 +72,7 @@ struct job_struct{
     int total_length_separated;
     // This is used for the PMEM insertion
     int total_length;
-    // Start write offset
+    // Start write offset, moved to u_long in 2022
     u_long offset;
     bool status;
     bool throttle;
@@ -102,6 +102,8 @@ struct job_struct{
       // because it will be batched to reduce overhead
       memcpy(whole_data+4,i_key,key_length);
       memcpy(whole_data+4+key_length,i_value,value_length);
+      key=whole_data+4;
+      value=whole_data+4+key_length;
     }
     ~job_struct(){
       // Free the allocated memory
@@ -115,7 +117,7 @@ struct job_struct{
 class WriteBatch : public WriteBatchBase {
  public:
   // Plasta
-  std::vector<job_struct*>* writebatch_data=new std::vector<job_struct*>();
+  std::vector<job_struct*> writebatch_data;
   bool wb_status=false;
   bool pmem_init=false;
   job_struct* result=NULL;
@@ -140,7 +142,7 @@ class WriteBatch : public WriteBatchBase {
     job_struct* js=new job_struct(key.data(),key.size(),value.data(),value.size());
     total_write+=js->total_length;
     total_write_rdb+=js->total_length_separated;
-    writebatch_data->push_back(js);
+    writebatch_data.push_back(js);
     return Status::OK();
     // Original
     // return Put(nullptr, key, value);

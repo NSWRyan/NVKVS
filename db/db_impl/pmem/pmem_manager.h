@@ -86,6 +86,7 @@ class pmem_manager{
     int close_pmem();
 
     public:
+    string pmem_dir;
     pmem2_persist_fn persist_fn;
     rocksdb::DB* db;
     rocksdb::DBImpl* DBI;

@@ -91,7 +91,7 @@ class job_threads
         job_threads();
         ~job_threads();
         void addWork_write(rocksdb::job_struct *job);
-        void addWork_write_batch(rocksdb::WriteBatch *job);
+        void addWork_write_batch(rocksdb::WriteBatch *job, u_short dimm);
         void addWork_read(job_pointer *job);
         void workerStart_write(u_short thread_id);
         void workerStart_read();
@@ -100,8 +100,7 @@ class job_threads
 
         // Stop all write threads
         void stopThreads();
-        int batchSize=0;
-        bool batchedBatch=true;
+        bool batchedBatch=false;
         bool pipelinedWrite=false;
         int buffer_high_threshold;
         int buffer_low_threshold;

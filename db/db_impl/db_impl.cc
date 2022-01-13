@@ -507,14 +507,18 @@ Status DBImpl::CloseHelper() {
   // }
   
   if(jt0!=NULL){
+    std::cout<<"closing start"<<std::endl;
     jt0->finished=true;
+    std::cout<<"closing start2"<<std::endl;
     for (int i=0;i<nThreadWrite;i++){
       while(!(jt0->wtd[i].status)){
         std::cout<<"";
       }
     }
+    std::cout<<"clearing pmem0..."<<std::endl;
     delete(jt0);
     delete(pman0);
+    std::cout<<"pmem0 done"<<std::endl;
     if(dual_writer){
       jt1->finished=true;
       for (int i=0;i<nThreadWrite;i++){
@@ -522,8 +526,10 @@ Status DBImpl::CloseHelper() {
           std::cout<<"";
         }
       }
+      std::cout<<"clearing pmem1..."<<std::endl;
       delete(jt1);
       delete(pman1);
+      std::cout<<"pmem1 done"<<std::endl;
     }
     std::cout<<"closing done"<<std::endl;
   }
@@ -1817,7 +1823,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
     if (s.ok()) {
       if (get_impl_options.get_value) {
         // Plasta get the data from pmem here
-        if(get_impl_options.value->size()==6){
+        if(get_impl_options.value->size()==8){
           get_impl_options.value->PinSelf(get_custom(get_impl_options.value->data()));
         }
         //get_impl_options.value->PinSelf("Modified value.");

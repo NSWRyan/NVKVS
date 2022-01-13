@@ -54,7 +54,7 @@ DEBUG_LEVEL?=1
 #
 # Set the default LIB_MODE to static
 LIB_MODE?=static
-
+$(info $$MAKECMDGOALS is ${MAKECMDGOALS})
 ifeq ($(MAKECMDGOALS),dbg)
 	DEBUG_LEVEL=2
 endif
