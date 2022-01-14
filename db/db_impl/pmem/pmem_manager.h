@@ -88,7 +88,9 @@ class pmem_manager{
     public:
     string pmem_dir;
     pmem2_persist_fn persist_fn;
+    // Currently unused
     rocksdb::DB* db;
+    // Provide access to the LSM tree to the log workers.
     rocksdb::DBImpl* DBI;
     u_long* offsets; 
     pmem_manager();

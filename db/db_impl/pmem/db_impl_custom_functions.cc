@@ -171,11 +171,9 @@ Slice DBImpl::get_custom(const char *string_offset){
     u_short dimm=mod[3];
     // Remove the byte 6 and 7, u_short is 2 byte
     mod[3]=0;
-    cout<<"read dimm "<<dimm<<endl;
-    cout<<"read offset "<<offset<<endl;
 
     job_pointer jp;
-    // Deprecated 0112
+    // Mask is deprecated 0112
     // jp.offset=offset&mask;
     jp.offset=offset;
     jp.status=false;
