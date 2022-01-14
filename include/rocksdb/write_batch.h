@@ -82,7 +82,7 @@ struct job_struct{
     job_struct(const char *i_key, u_short i_key_length, 
     const char *i_value, u_short i_value_length):offset(0),status(false),throttle(false),dimm(0){
       total_length_separated=i_key_length+8+24;
-      total_length=4 + i_key_length + i_value_length;
+      total_length=4 + i_key_length + i_value_length+1;
       key_length=i_key_length;
       value_length=i_value_length;
       // Deprecated Old method 0111

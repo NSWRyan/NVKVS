@@ -1,4 +1,5 @@
 #include <pthread.h>
+#include <algorithm>
 #include <memory>
 #include <list>
 #include <vector>
@@ -31,6 +32,7 @@ struct pointer_passer{
     pointer_passer(u_short ID):threadID(ID){};
     bool writer=false;
     bool timer=false;
+    bool gc=false;
 };
 
 struct batch_helper{
@@ -95,28 +97,71 @@ class job_threads
         void addWork_read(job_pointer *job);
         void workerStart_write(u_short thread_id);
         void workerStart_read();
+        void workerStart_gc();
         void timerStart_write();
         int init(u_short threadCount_write, u_short threadCount_read, pmem_manager *pman);
 
         // Stop all write threads
         void stopThreads();
+        // Calculate the % free space of the pmem
+        int freespace(u_long cur, u_long gc, u_long max);
+        // Direct write by the client thread if true.
+        // The default is false
         bool batchedBatch=false;
+        // Depreciated
         bool pipelinedWrite=false;
+        // The threshold to throttle the client threads.
         int buffer_high_threshold;
+        // The threshold to release the throttle.
         int buffer_low_threshold;
+        // The number of KV in a single buffer
         int list_capacity=10000000;
+        // The timer polling in us.
         int timerus=0;
+        // us the thread need to wait before continue.
         int slow_down=0;
+        // The number of kv in the current buffer.
         int w_count=0;
+        // The totak kv in this session.
         int total_w_count=0;
+        // Write lock, the simple one as a guarantee if mutex failed.
         bool b_cond_w=true;
+        // Write lock, the simple one as a guarantee if mutex failed.
         bool timer_lock=true;
+        // Tell the client thread to slow down if there is a congestion.
         bool throttle=false;
+        // The total KV sizes in the current buffer.
         long current_buffer_size;
+        // The revolver style buffer for quick swap/reload
+        // wtd contains 1 buffer for each write thread 
         write_threads_data* wtd;
-        bool finished;   // Threads will re-wait while this is true.
+        // Threads will re-wait while this is false.
+        bool finished;   
+        // The number of thread in the waiting room
         u_short wait_count;
+        // Enable the batched write to Pmem, this reduces IO.
+        // The default is false
         bool memory_buffer=false;
+        // Start GC automatically if the free space left is
+        // less than this number.
+        // The default is 20%
+        int gc_auto_trigger_percent=20;
+        // Slow down write if free space is less than gc_throttle.
+        // gc_throttle should be lower than gc_auto_trigger_percent
+        // Default is 10%
+        int gc_throttle=10;
+        // Manual GC enable, 0 for off, 1 for always on, default is false
+        bool manual_gc=false;
+        // Set this to true to run the GC thread
+        bool gc_run=false;
+        // How much % should the GC do at a time
+        // The default is 10% of the max
+        int gc_how_much=10;
+        // GC write batch size
+        int gc_wb_size=200;
+        // The current free_space of the pmem
+        int free_space=100;
+        bool print_debug=true;
 
     private:
         friend void* job_threads_Start(void*);
@@ -134,6 +179,7 @@ class job_threads
         std::list<rocksdb::WriteBatch*>     workQueue_w_batch;  // A queue of jobs.
         std::list<job_pointer*>     workQueue_r;  // A queue of jobs.
         pthread_t timer_thread;
+        pthread_t gc_thread;
         std::vector<pthread_t>threads_write;
         std::vector<pthread_t>threads_read;
         rocksdb::WriteOptions wo;

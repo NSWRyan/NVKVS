@@ -20,6 +20,24 @@ void DBImpl::load_pmem(bool new_old){
     int batchTimer=1000;
     bool memory_buffer=true;
     dimm_dir0="/dev/dax0.1";
+
+    // GC
+
+    // The default is 20%
+    int gc_auto_trigger_percent=20;
+    // Slow down write if free space is less than gc_throttle.
+    // gc_throttle should be lower than gc_auto_trigger_percent
+    // Default is 10%
+    int gc_throttle=10;
+    // Manual GC enable, 0 for off, 1 for always on, default is false
+    bool manual_gc=false;
+    // How much % should the GC do at a time
+    // The default is 10% of the max
+    int gc_how_much=10;
+    // GC write batch size
+    int gc_wb_size=200;
+    bool print_debug=false;
+
     ifstream main_file("/home/ryan/RyanProject1/rdbshared/config");
     string conf_input;
     getline(main_file,conf_input); // Run PMEM or WiscKey
@@ -55,6 +73,31 @@ void DBImpl::load_pmem(bool new_old){
         getline(main_file,dimm_dir0);
     }
 
+    // GC new configs
+    if(getline(main_file,conf_input)){ 
+        gc_auto_trigger_percent=stoi(conf_input);
+
+        getline(main_file,conf_input); 
+        gc_throttle = stoi(conf_input);
+
+        getline(main_file,conf_input); 
+        if(stoi(conf_input)==1){
+            manual_gc=true;
+        }
+
+        getline(main_file,conf_input); 
+        gc_how_much = stoi(conf_input);
+
+        getline(main_file,conf_input); 
+        gc_wb_size = stoi(conf_input);
+
+        getline(main_file,conf_input); 
+        if(stoi(conf_input)==1){
+            print_debug=true;
+        }
+    }else{
+        getline(main_file,dimm_dir0);
+    }
 
     //Second load the PMem managers
     // Now load the first PMem managers
@@ -82,6 +125,12 @@ void DBImpl::load_pmem(bool new_old){
     jt0->buffer_high_threshold=batchSize;
     jt0->timerus=batchTimer;
     jt0->memory_buffer=memory_buffer;
+    jt0->gc_auto_trigger_percent=gc_auto_trigger_percent;
+    jt0->gc_throttle=gc_throttle;
+    jt0->manual_gc=manual_gc;
+    jt0->gc_how_much=gc_how_much;
+    jt0->gc_wb_size=gc_wb_size;
+    jt0->print_debug=print_debug;
     std::cout<<"Loaded PMEM0 at"<<dimm_dir0<<std::endl;
 
     if(dual_writer){
@@ -104,6 +153,12 @@ void DBImpl::load_pmem(bool new_old){
         jt1->buffer_high_threshold=batchSize;
         jt1->timerus=batchTimer;
         jt1->memory_buffer=memory_buffer;
+        jt1->gc_auto_trigger_percent=gc_auto_trigger_percent;
+        jt1->gc_throttle=gc_throttle;
+        jt1->manual_gc=manual_gc;
+        jt1->gc_how_much=gc_how_much;
+        jt1->gc_wb_size=gc_wb_size;
+        jt1->print_debug=print_debug;
         std::cout<<"Loaded PMEM1 at"<<dimm_dir1<<std::endl;
 
     }
@@ -177,8 +232,8 @@ Slice DBImpl::get_custom(const char *string_offset){
     // jp.offset=offset&mask;
     jp.offset=offset;
     jp.status=false;
-    // std::cout<<"read dimm "<<dimm<<std::endl;
-    // std::cout<<"read offset "<<jp.offset<<std::endl;
+    std::cout<<"read dimm "<<dimm<<std::endl;
+    std::cout<<"read offset "<<jp.offset<<std::endl;
     if(dimm==0){
         pman0->readSTNC(&jp);
     }

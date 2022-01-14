@@ -77,7 +77,6 @@ class pmem_manager{
 	struct pmem2_map *map;
 	struct pmem2_source *src;
     size_t pmem_size;
-    char *pmem_addr;
     u_short thread_number;
     int init_pmem(u_short nThread);
     int load_pmem(u_short nThread);
@@ -87,6 +86,7 @@ class pmem_manager{
 
     public:
     string pmem_dir;
+    char *pmem_addr;
     pmem2_persist_fn persist_fn;
     // Currently unused
     rocksdb::DB* db;
@@ -97,6 +97,7 @@ class pmem_manager{
     ~pmem_manager();
     int open_pmem(u_short nThread, bool start_new, string dir);
     char config_;
+    bool print_debug=true;
 
     // Only for 1 thread
     u_long offset;

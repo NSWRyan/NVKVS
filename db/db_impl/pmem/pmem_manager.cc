@@ -1,210 +1,217 @@
 #include "db/db_impl/pmem/pmem_manager.h"
 using namespace std;
 
-
 // Destructor
-pmem_manager::~pmem_manager(){
-    if(initiated){
-        close_pmem();
-        //delete(db);
-    }
+pmem_manager::~pmem_manager() {
+  if (initiated) {
+    close_pmem();
+    // delete(db);
+  }
 }
 
 // Initialize from 0
-pmem_manager::pmem_manager(){
-    initiated=false;
-}
+pmem_manager::pmem_manager() { initiated = false; }
 
 // Initialize the pmem address
-int pmem_manager::open_pmem(u_short nThread, bool start_new, string dir){
-    pmem_dir=dir;
-    if ((fd = open(dir.c_str(), O_RDWR)) < 0) {
-        printf("Open failed;");
-        perror("open");
-        exit(1);
-    }
+int pmem_manager::open_pmem(u_short nThread, bool start_new, string dir) {
+  pmem_dir = dir;
+  if ((fd = open(dir.c_str(), O_RDWR)) < 0) {
+    printf("Open failed;");
+    perror("open");
+    exit(1);
+  }
 
-    if (pmem2_config_new(&cfg)) {
-        pmem2_perror("pmem2_config_new");
-        exit(1);
-    }
+  if (pmem2_config_new(&cfg)) {
+    pmem2_perror("pmem2_config_new");
+    exit(1);
+  }
 
-    if (pmem2_source_from_fd(&src, fd)) {
-        pmem2_perror("pmem2_source_from_fd");
-        exit(1);
-    }
+  if (pmem2_source_from_fd(&src, fd)) {
+    pmem2_perror("pmem2_source_from_fd");
+    exit(1);
+  }
 
-    if (pmem2_config_set_required_store_granularity(cfg,
-            PMEM2_GRANULARITY_PAGE)) {
-        pmem2_perror("pmem2_config_set_required_store_granularity");
-        exit(1);
-    }
+  if (pmem2_config_set_required_store_granularity(cfg,
+                                                  PMEM2_GRANULARITY_PAGE)) {
+    pmem2_perror("pmem2_config_set_required_store_granularity");
+    exit(1);
+  }
 
-    if (pmem2_map_new(&map, cfg, src)) {
-        pmem2_perror("pmem2_map");
-        exit(1);
-    }
-    pmem_addr = (char*)pmem2_map_get_address(map);
-    pmem_size = pmem2_map_get_size(map);
-    persist_fn = pmem2_get_persist_fn(map);
+  if (pmem2_map_new(&map, cfg, src)) {
+    pmem2_perror("pmem2_map");
+    exit(1);
+  }
+  pmem_addr = (char*)pmem2_map_get_address(map);
+  pmem_size = pmem2_map_get_size(map);
+  persist_fn = pmem2_get_persist_fn(map);
 
-    if(start_new){
-        init_pmem(nThread);
-    }
+  if (start_new) {
+    init_pmem(nThread);
+  }
 
-    if(load_header(nThread)!=0){
-        cout<<"Load header fail"<<endl;
-        init_pmem(nThread);
-        if(load_header(nThread)!=0){
-            cout<<"Load header fail again"<<endl;
-        }
+  if (load_header(nThread) != 0) {
+    cout << "Load header fail" << endl;
+    init_pmem(nThread);
+    if (load_header(nThread) != 0) {
+      cout << "Load header fail again" << endl;
     }
-    //load_llsm();
-    initiated=true;
-    return 0;
+  }
+  // load_llsm();
+  initiated = true;
+  print_debug = false;
+  return 0;
 }
 
 // Clear all of the mappings
-int pmem_manager::close_pmem(){
-    initiated=false;
-    // Update the offset and persist it.
-    offsets[2]=current_offset.offset_current;
-    persist_fn(offsets+3,8*4);
-    cout<<pmem_dir<<" Start pos"<<endl;
-    cout<<offsets[0]<<endl;
-    cout<<pmem_dir<<" last GC pos"<<endl;
-    cout<<offsets[1]<<endl;
-    cout<<pmem_dir<<" last write pos"<<endl;
-    cout<<offsets[2]<<endl;
-    cout<<pmem_dir<<" max write"<<endl;
-    cout<<offsets[3]<<endl;
+int pmem_manager::close_pmem() {
+  initiated = false;
+  // Update the offset and persist it.
+  offsets[1] = current_offset.offset_gc;
+  offsets[2] = current_offset.offset_current;
+  persist_fn(offsets + 3, 8 * 4);
 
-    pmem2_map_delete(&map);
-    pmem2_source_delete(&src);
-    pmem2_config_delete(&cfg);
-    close(fd);
-    return 0;
+  if (print_debug) {
+    cout << pmem_dir << " Start pos" << endl;
+    cout << offsets[0] << endl;
+    cout << pmem_dir << " last GC pos" << endl;
+    cout << offsets[1] << endl;
+    cout << pmem_dir << " last write pos" << endl;
+    cout << offsets[2] << endl;
+    cout << pmem_dir << " max write" << endl;
+    cout << offsets[3] << endl;
+  }
+  pmem2_map_delete(&map);
+  pmem2_source_delete(&src);
+  pmem2_config_delete(&cfg);
+  close(fd);
+  return 0;
 }
 
 // Initialize the PMEM and partition the PMEM.
 // offsets[0+n*2] = last GC
 // offsets[1+n*2] = write continue offset, offset_current
-int pmem_manager::init_pmem(u_short nThread){
-    // total_write is the size of the header
-    u_long total_write=1;
-    pmem_addr[0]='1';
-    // Total write + 1 byte
-    memcpy(pmem_addr+1,&nThread,2);
-    total_write+=2;
-    // Total write + 2 bytes;
-    offsets=(u_long*)(pmem_addr+3);
-    // Offset sizes (3 longs)
-    total_write+=32;
-    // Size for each partition, -1 is to ensure that no overcapacity writes
-    max_write=(pmem_size-total_write-1);
-    // The start position
-    offsets[0]=total_write;
-    // The last GC pos
-    offsets[1]=total_write;
-    // The last write pos
-    offsets[2]=total_write;
-    // The max write
-    offsets[3]=total_write+max_write;
-    // Now persist the header
-    persist_fn(pmem_addr,total_write);
-    offset=0;
-    return 0;
+int pmem_manager::init_pmem(u_short nThread) {
+  // total_write is the size of the header
+  u_long total_write = 1;
+  pmem_addr[0] = '1';
+  // Total write + 1 byte
+  memcpy(pmem_addr + 1, &nThread, 2);
+  total_write += 2;
+  // Total write + 2 bytes;
+  offsets = (u_long*)(pmem_addr + 3);
+  // Offset sizes (3 longs)
+  total_write += 32;
+  // Size for each partition, -1 is to ensure that no overcapacity writes
+  max_write = (pmem_size - total_write - 1);
+  // The start position
+  offsets[0] = total_write;
+  // The last GC pos
+  offsets[1] = total_write;
+  // The last write pos
+  offsets[2] = total_write;
+  // The max write
+  offsets[3] = total_write + max_write;
+  // Now persist the header
+  persist_fn(pmem_addr, total_write);
+  offset = 0;
+  return 0;
 }
 
-int pmem_manager::load_header(u_short nThread){
-    /*
-    if(pmem_addr[0]!=1){
-        // Not initialized so lets initialize it.
-        init_pmem(nThread);
-    }
-    */
-    int return_val=0;
-    u_short *temp_nThread=(u_short*)(pmem_addr+1);
-    if(temp_nThread[0]!=nThread){
-        // Error the number of thread is not matching
-        return_val=1;
-        init_pmem(3);
-    };
-    
-    // Load the offsets
-    offsets=(u_long*)(pmem_addr+3);
+int pmem_manager::load_header(u_short nThread) {
+  /*
+  if(pmem_addr[0]!=1){
+      // Not initialized so lets initialize it.
+      init_pmem(nThread);
+  }
+  */
+  int return_val = 0;
+  u_short* temp_nThread = (u_short*)(pmem_addr + 1);
+  if (temp_nThread[0] != nThread) {
+    // Error the number of thread is not matching
+    return_val = 1;
+    init_pmem(3);
+  };
 
-    // Now fill in the offset_helper for each threads.
-    // The start position
-    current_offset.offset_start=offsets[0];
-    // The last GC pos
-    current_offset.offset_gc=offsets[1];
-    // The last write pos
-    current_offset.offset_current=offsets[2];
-    // The max write
-    current_offset.offset_max=current_offset.offset_start+max_write-1;
-    //cout<<"T"<<i<<" offset start "<<current_offset[i].offset_current<<" stop "<< current_offset[i].offset_max<<endl;
+  // Load the offsets
+  offsets = (u_long*)(pmem_addr + 3);
 
-    return return_val;
+  // Now fill in the offset_helper for each threads.
+  // The start position
+  current_offset.offset_start = offsets[0];
+  // The last GC pos
+  current_offset.offset_gc = offsets[1];
+  // The last write pos
+  current_offset.offset_current = offsets[2];
+  // The max write
+  current_offset.offset_max = current_offset.offset_start + max_write - 1;
+  // cout<<"T"<<i<<" offset start "<<current_offset[i].offset_current<<" stop
+  // "<< current_offset[i].offset_max<<endl;
+
+  return return_val;
 }
 
-int pmem_manager::reset_pmem(){
-    pmem_addr[0]=0;
-    persist_fn(pmem_addr,1);
-    return 0;
+int pmem_manager::reset_pmem() {
+  pmem_addr[0] = 0;
+  persist_fn(pmem_addr, 1);
+  return 0;
 }
 
 // Write using persistency from libpmem2
-long pmem_manager::insertST(string key, u_short key_length, string value, u_short value_length){
-    long original_offset = offset;
-    //struture of each write key_length | value_length | key | value
-    //Write and persist key
-    offset+=4+key_length+value_length;
-    memcpy(pmem_addr+original_offset,&key_length,2);
-    memcpy(pmem_addr+original_offset+2,&value_length,2);
-    //Write and persist key value
-    memcpy(pmem_addr+original_offset+4,key.c_str(),  key_length);
-    memcpy(pmem_addr+original_offset+4+key_length,value.c_str(), value_length);
-    persist_fn(pmem_addr+original_offset,4+key_length+value_length);
-    return original_offset;
+long pmem_manager::insertST(string key, u_short key_length, string value,
+                            u_short value_length) {
+  long original_offset = offset;
+  // struture of each write key_length | value_length | key | value
+  // Write and persist key
+  offset += 4 + key_length + value_length;
+  memcpy(pmem_addr + original_offset, &key_length, 2);
+  memcpy(pmem_addr + original_offset + 2, &value_length, 2);
+  // Write and persist key value
+  memcpy(pmem_addr + original_offset + 4, key.c_str(), key_length);
+  memcpy(pmem_addr + original_offset + 4 + key_length, value.c_str(),
+         value_length);
+  persist_fn(pmem_addr + original_offset, 4 + key_length + value_length);
+  return original_offset;
 }
 
-void pmem_manager::insertNT(const char* key, u_short key_length, const char* value, u_short value_length, long write_offset){
-    //Write and persist key and value length
-    memcpy(pmem_addr+write_offset,&key_length,2);
-    memcpy(pmem_addr+write_offset+2,&value_length,2);
+void pmem_manager::insertNT(const char* key, u_short key_length,
+                            const char* value, u_short value_length,
+                            long write_offset) {
+  // Write and persist key and value length
+  memcpy(pmem_addr + write_offset, &key_length, 2);
+  memcpy(pmem_addr + write_offset + 2, &value_length, 2);
 
-    // Write and persist key and value
-    memcpy(pmem_addr+write_offset+4,key,key_length);
-    memcpy(pmem_addr+write_offset+4+key_length,value, value_length);
-    persist_fn(pmem_addr+write_offset,4+key_length+value_length);
+  // Write and persist key and value
+  memcpy(pmem_addr + write_offset + 4, key, key_length);
+  memcpy(pmem_addr + write_offset + 4 + key_length, value, value_length);
+  persist_fn(pmem_addr + write_offset, 4 + key_length + value_length);
 }
 
-void pmem_manager::insertBatch(rocksdb::WriteBatch* wb){
-    size_t v_size=wb->writebatch_data.size();
-    for(size_t i=0;i<v_size;i++){
-        rocksdb::job_struct* js=wb->writebatch_data.at(i);
-        memcpy(pmem_addr+js->offset,&(js->key_length),2);
-        memcpy(pmem_addr+js->offset+2,&(js->value_length),2);
-        memcpy(pmem_addr+js->offset+4,js->key,js->key_length);
-        memcpy(pmem_addr+js->offset+4+js->key_length,js->value, js->value_length);
-    }
+void pmem_manager::insertBatch(rocksdb::WriteBatch* wb) {
+  size_t v_size = wb->writebatch_data.size();
+  for (size_t i = 0; i < v_size; i++) {
+    rocksdb::job_struct* js = wb->writebatch_data.at(i);
+    memcpy(pmem_addr + js->offset, &(js->key_length), 2);
+    memcpy(pmem_addr + js->offset + 2, &(js->value_length), 2);
+    memcpy(pmem_addr + js->offset + 4, js->key, js->key_length);
+    memcpy(pmem_addr + js->offset + 4 + js->key_length, js->value,
+           js->value_length);
+  }
 }
 
-void pmem_manager::insertJS(rocksdb::job_struct* js){
-    memcpy(pmem_addr+js->offset,&(js->key_length),2);
-    memcpy(pmem_addr+js->offset+2,&(js->value_length),2);
-    memcpy(pmem_addr+js->offset+4,js->key,js->key_length);
-    memcpy(pmem_addr+js->offset+4+js->key_length,js->value, js->value_length);
+void pmem_manager::insertJS(rocksdb::job_struct* js) {
+  memcpy(pmem_addr + js->offset, &(js->key_length), 2);
+  memcpy(pmem_addr + js->offset + 2, &(js->value_length), 2);
+  memcpy(pmem_addr + js->offset + 4, js->key, js->key_length);
+  memcpy(pmem_addr + js->offset + 4 + js->key_length, js->value,
+         js->value_length);
 }
 
-void pmem_manager::insertManual(char* data, long length, long i_offset){
-    memcpy(pmem_addr+i_offset,data,length);
+void pmem_manager::insertManual(char* data, long length, long i_offset) {
+  memcpy(pmem_addr + i_offset, data, length);
 }
 
-
-void pmem_manager::persist(u_long insert_offset, size_t length){
-    persist_fn(pmem_addr+insert_offset,length);
+void pmem_manager::persist(u_long insert_offset, size_t length) {
+  persist_fn(pmem_addr + insert_offset, length);
 }
 
 /* Deprecated
@@ -221,32 +228,32 @@ int pmem_manager::readST(long offset, job_struct &the_job){
 */
 
 // This one is just passing the pointer toward the requester. Zero copy.
-int pmem_manager::readSTNC(job_pointer *the_job){
-    //Get the address of the data
-    u_short *header=(u_short*)(pmem_addr+the_job->offset);
+int pmem_manager::readSTNC(job_pointer* the_job) {
+  // Get the address of the data
+  u_short* header = (u_short*)(pmem_addr + the_job->offset);
 
-    //Get the length
-    the_job->key_length=header[0];
-    the_job->value_length=header[1];
+  // Get the length
+  the_job->key_length = header[0];
+  the_job->value_length = header[1];
 
-    //Assign the address based on the length
-    //4 is the length of the header
-    the_job->key_offset=(char*)pmem_addr+the_job->offset+4;
-    //Value start after the key.
-    the_job->value_offset=the_job->key_offset+the_job->key_length;
-    return 0;
+  // Assign the address based on the length
+  // 4 is the length of the header
+  the_job->key_offset = (char*)pmem_addr + the_job->offset + 4;
+  // Value start after the key.
+  the_job->value_offset = the_job->key_offset + the_job->key_length;
+  return 0;
 }
 
-void pmem_manager::load_llsm(){
-    std::string kDBPath = "/home/ryan/RyanProject1/rdbshared/llsm/";
-    
-    rocksdb::Options options;
-    options.IncreaseParallelism();
-    options.OptimizeLevelStyleCompaction();
-    options.enable_pipelined_write=true;
-    options.num_levels=1;
-    options.compression_per_level.push_back(rocksdb::kNoCompression);
-    options.max_bytes_for_level_base=(100000000000); // 100 GB
-    options.compaction_style=rocksdb::kCompactionStyleLevel;
-    rocksdb::DB::Open(options,kDBPath,&db);
+void pmem_manager::load_llsm() {
+  std::string kDBPath = "/home/ryan/RyanProject1/rdbshared/llsm/";
+
+  rocksdb::Options options;
+  options.IncreaseParallelism();
+  options.OptimizeLevelStyleCompaction();
+  options.enable_pipelined_write = true;
+  options.num_levels = 1;
+  options.compression_per_level.push_back(rocksdb::kNoCompression);
+  options.max_bytes_for_level_base = (100000000000);  // 100 GB
+  options.compaction_style = rocksdb::kCompactionStyleLevel;
+  rocksdb::DB::Open(options, kDBPath, &db);
 }
