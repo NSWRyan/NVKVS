@@ -183,6 +183,7 @@ class job_threads
         std::vector<pthread_t>threads_write;
         std::vector<pthread_t>threads_read;
         rocksdb::WriteOptions wo;
+        rocksdb::ReadOptions ro;
         bool timer_alive=false;
 };
 

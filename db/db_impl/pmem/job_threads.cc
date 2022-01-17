@@ -24,6 +24,9 @@ int job_threads::init(u_short threadCount_write, u_short threadCount_read,
   timerus = 1000;
   wait_count = 0;
   current_buffer_size = 0;
+  wo=rocksdb::WriteOptions();
+  wo.disableWAL=true;
+  ro=rocksdb::ReadOptions();
   // Allocate the buffers
   workQueue_w = (rocksdb::job_struct**)malloc(sizeof(rocksdb::job_struct*) *
                                               list_capacity);
@@ -367,14 +370,21 @@ void job_threads::workerStart_gc() {
                     }else{
                         this_offset+=total_length;
                     }
-                    
-                    wb.Put2(rocksdb::Slice(key_offset,header[0]),rocksdb::Slice(value_offset,header[1]));
-                    wb_kv_count++;
+
+                    string value;
+                    this_pman->DBI->Get(ro,rocksdb::Slice(key_offset,header[0]),&value);
+                    // Only add if the value is still valid in the LSM tree.
+                    if(strncmp(value.c_str(),value_offset,header[1])==0){
+                      // The KV is still the latest version/valid.
+                      wb.Put2(rocksdb::Slice(key_offset,header[0]),rocksdb::Slice(value_offset,header[1]));
+                      wb_kv_count++;
+                    }
+
                     if(wb_kv_count>gc_wb_size){
-                        this_pman->DBI->Write(rocksdb::WriteOptions(),&wb);
-                        this_pman->current_offset.offset_gc=this_offset;
-                        wb_kv_count=0;
-                        wb=rocksdb::WriteBatch(10000000); 
+                          this_pman->DBI->Write(rocksdb::WriteOptions(),&wb);
+                          this_pman->current_offset.offset_gc=this_offset;
+                          wb_kv_count=0;
+                          wb=rocksdb::WriteBatch(10000000); 
                     }
                     session_gc_size+=total_length;
                 }
