@@ -21,9 +21,6 @@ namespace ROCKSDB_NAMESPACE {
 Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
                    const Slice& key, const Slice& val) {
 
-  // Debug
-  cout<<key.data_<<endl;
-  // Debug end
   if(key.size_<1)
   if(!o.disableWAL){
       if(column_family->GetID())
@@ -31,14 +28,16 @@ Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
         if(val.size_<1)
           std::cout<<"";
   }
-  WriteBatch batch(key.size() + 6 + 24);
+  //WriteBatch batch(key.size() + 6 + 24);
   // JS is created here and deleted by the writer thread when completed.
   job_struct* js=new job_struct(key.data(),key.size(),val.data(),val.size());
   put_custom(js);
   u_long insert_offset=js->offset;
   u_short* dimm=(u_short*)&(insert_offset);
   dimm[3]=js->dimm;
+  //return Status::OK();
   return DB::Put(o, column_family, key, Slice((char*)(&(insert_offset)),8));
+
   // Use this if do not want to write to LSM.
   //return Status::OK();//Write(o, &batch);
   // std::cout<<"dimm "<<js->dimm<<endl;

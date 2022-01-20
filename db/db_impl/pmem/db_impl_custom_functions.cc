@@ -20,6 +20,7 @@ void DBImpl::load_pmem(bool new_old){
     int batchTimer=1000;
     bool memory_buffer=true;
     dimm_dir0="/dev/dax0.1";
+    dimm_dir1="/dev/dax1.0";
 
     // GC
 
@@ -67,10 +68,8 @@ void DBImpl::load_pmem(bool new_old){
         if(stoi(conf_input)==1){
             dual_writer=true;
         }
-        getline(main_file,dimm_dir0);
-        getline(main_file,dimm_dir1);
-    }else{
-        getline(main_file,dimm_dir0);
+            getline(main_file,dimm_dir0);
+            getline(main_file,dimm_dir1);
     }
 
     // GC new configs
@@ -95,8 +94,6 @@ void DBImpl::load_pmem(bool new_old){
         if(stoi(conf_input)==1){
             print_debug=true;
         }
-    }else{
-        getline(main_file,dimm_dir0);
     }
 
     //Second load the PMem managers
@@ -232,8 +229,8 @@ Slice DBImpl::get_custom(const char *string_offset){
     // jp.offset=offset&mask;
     jp.offset=offset;
     jp.status=false;
-    std::cout<<"read dimm "<<dimm<<std::endl;
-    std::cout<<"read offset "<<jp.offset<<std::endl;
+    //std::cout<<"read dimm "<<dimm<<std::endl;
+    //std::cout<<"read offset "<<jp.offset<<std::endl;
     if(dimm==0){
         pman0->readSTNC(&jp);
     }

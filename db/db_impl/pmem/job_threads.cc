@@ -301,7 +301,7 @@ void job_threads::timerStart_write() {
         // No available worker so possible congestion
         // Check GC first
         free_space=freespace(this_pman->current_offset.offset_current,
-                    this_pman->current_offset.offset_current,
+                    this_pman->current_offset.offset_gc,
                     this_pman->current_offset.offset_max);
         if (free_space < gc_auto_trigger_percent) {
             // Free space reached the limit, run GC
@@ -338,6 +338,7 @@ void job_threads::workerStart_gc() {
     while(!finished){
         usleep(timerus);
         if(gc_run){
+            std::cout<<"GC online."<<std::endl;
             // GC job here
             u_long size_to_GC = 
                 std::min(
@@ -360,8 +361,8 @@ void job_threads::workerStart_gc() {
                     char* key_offset=this_pman->pmem_addr+this_offset+4;
                     char* value_offset=key_offset+header[0];
                     int total_length=4+header[0]+header[1]+1;
-                    cout<<string(key_offset,header[0])<<endl;
-                    cout<<string(value_offset,header[1])<<endl;
+                    // cout<<string(key_offset,header[0])<<endl;
+                    // cout<<string(value_offset,header[1])<<endl;
 
                     // Rotation char is value_offset[header1]
                     if(this_offset>this_pman->current_offset.offset_current&&value_offset[header[1]]==1){
@@ -387,6 +388,9 @@ void job_threads::workerStart_gc() {
                           wb=rocksdb::WriteBatch(10000000); 
                     }
                     session_gc_size+=total_length;
+                    if(finished){
+                      break;
+                    }
                 }
                 if(wb_kv_count>0){
                     this_pman->DBI->Write(rocksdb::WriteOptions(),&wb);
@@ -394,6 +398,8 @@ void job_threads::workerStart_gc() {
                     wb_kv_count=0;
                     wb=rocksdb::WriteBatch(10000000); 
                 }
+
+                std::cout<<"GC offline."<<std::endl;
                 // read
 
                 // Insert to write batch
