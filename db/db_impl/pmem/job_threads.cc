@@ -382,7 +382,7 @@ void job_threads::workerStart_gc() {
                     }
 
                     if(wb_kv_count>gc_wb_size){
-                          this_pman->DBI->Write(rocksdb::WriteOptions(),&wb);
+                          this_pman->DBI->Write(wo,&wb);
                           this_pman->current_offset.offset_gc=this_offset;
                           wb_kv_count=0;
                           wb=rocksdb::WriteBatch(10000000); 
@@ -420,7 +420,7 @@ void job_threads::workerStart_write(u_short thread_id) {
       batch_job* jobs = getJob_w(thread_id);
       if (jobs != NULL) {
         // For manual insertion to the LSM tree.
-        // rocksdb::WriteBatch wb_in(jobs->wb_size);
+        rocksdb::WriteBatch wb_in(jobs->wb_size);
 
         // Get the start_offset of this write job.
         u_long start_offset = jobs->jobs[0]->offset;
@@ -432,6 +432,11 @@ void job_threads::workerStart_write(u_short thread_id) {
 
           // Iterate the jobs and insert to the buffer
           for (int i = 0; i < jobs->n_jobs; i++) {
+            // u_long insert_offset=jobs->jobs[i]->offset;
+            // u_short* dimm=(u_short*)&(insert_offset);
+            // dimm[3]=jobs->jobs[i]->dimm;
+            // wb_in.Put2(rocksdb::Slice(jobs->jobs[i]->key,jobs->jobs[i]->key_length),
+            //   rocksdb::Slice((char*)(&(insert_offset)),8));
             // Write into the buffer
             mempcpy(temporary_buffer + cur_pos, jobs->jobs[i]->whole_data,
                     jobs->jobs[i]->total_length);
@@ -442,6 +447,7 @@ void job_threads::workerStart_write(u_short thread_id) {
           }
           this_pman->insertManual(temporary_buffer, jobs->total_write_byte,
                                   start_offset);
+          // this_pman->DBI->Write(wo,&wb_in);
           // Now clean the buffer
           free(temporary_buffer);
 

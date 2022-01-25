@@ -180,8 +180,8 @@ void DBImpl::put_custom(job_struct* js){
         }else{
             // Insert into PMem1
             pmem_insertion1++;
-            jt1->addWork_write(js);
             js->dimm=1;
+            jt1->addWork_write(js);
         }
     }else{
         jt0->addWork_write(js);
