@@ -72,12 +72,37 @@ struct batch_job{
         //delete(jobs);
     };
 };
-
+// The batch data
+// timer_status 0 and write_status 0 Empty, waiting to be filled
+// timer_status 0 and write_status 1 Unused
+// timer_status 1 and write_status 0 Filled, waiting for worker
+// timer_status 1 and write_status 1 Filled, Being worked
 struct write_threads_data{
+    // The data
     rocksdb::job_struct** buffer=NULL;
     bool status;
+    // The status of the timer
+    // 0 = not filled by the timer yet
+    // 1 = filled by the timer 
+    bool timer_status=false;
+    // The status of the worker
+    // 0 = not being worked on
+    // 1 = still being worked on
+    bool worker_status=false;
+    // Total number of jobs
+    int n_jobs;
+    // The size of write batch for the LSM-tree insertion
+    int wb_size;
+    // Total bytes for the batch job
+    long total_write_byte=0;
+    // new_offset is the new write offset after this batch_job 
+    u_long new_offset;
     write_threads_data(){
         status=false;
+        n_jobs=0;
+        wb_size=0;
+        total_write_byte=0;
+        new_offset=0;
     };
     ~write_threads_data(){
         delete(buffer);
@@ -96,11 +121,14 @@ class job_threads
         void addWork_write_batch(rocksdb::WriteBatch *job, u_short dimm);
         void addWork_read(job_pointer *job);
         void workerStart_write(u_short thread_id);
+        void write_it();
         void workerStart_read();
         void workerStart_gc();
         void timerStart_write();
+        bool find_empty_batch();
         int init(u_short threadCount_write, u_short threadCount_read, pmem_manager *pman);
 
+        u_short iThreadCount_write;
         // Stop all write threads
         void stopThreads();
         // Calculate the % free space of the pmem
@@ -167,10 +195,13 @@ class job_threads
         friend void* job_threads_Start(void*);
         bool initiated;
 
-        batch_job* getJob_w(u_short thread_id);
+        u_short getJob_w();
         job_pointer* getJob_r();
         pmem_manager *this_pman;
-        pthread_mutex_t     mutex_w;      // A lock so that we can sequence accesses.
+        // A lock for writer threads
+        pthread_mutex_t     mutex_w;
+        // A lock for client threads      
+        pthread_mutex_t     mutex_w2;      
         pthread_mutex_t     mutex_r;      // A lock so that we can sequence accesses.
         pthread_cond_t      cond_w;       // The condition variable that is used to hold worker threads.
         pthread_cond_t      cond_r;       // The condition variable that is used to hold worker threads.

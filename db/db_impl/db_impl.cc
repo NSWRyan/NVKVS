@@ -507,10 +507,12 @@ Status DBImpl::CloseHelper() {
   // }
   
   if(jt0!=NULL){
+    cout<<"closing..."<<endl;
     jt0->finished=true;
     delete(jt0);
     delete(pman0);
     if(dual_writer){
+      cout<<"closing2..."<<endl;
       jt1->finished=true;
       delete(jt1);
       delete(pman1);
