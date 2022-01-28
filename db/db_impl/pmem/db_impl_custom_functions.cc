@@ -95,11 +95,19 @@ void DBImpl::load_pmem(bool new_old){
             print_debug=true;
         }
     }
+    std::cout<<"batchedBatch "<<batchedBatch<<std::endl;
+    std::cout<<"batchSize "<<batchSize<<std::endl;
+    std::cout<<"batchTimer "<<batchTimer<<std::endl;
+    std::cout<<"memory_buffer "<<memory_buffer<<std::endl;
+    std::cout<<"gc_auto_trigger_percent "<<gc_auto_trigger_percent<<std::endl;
+    std::cout<<"gc_throttle "<<gc_throttle<<std::endl;
+    std::cout<<"manual_gc "<<manual_gc<<std::endl;
+    std::cout<<"gc_how_much "<<gc_how_much<<std::endl;
+    std::cout<<"gc_wb_size "<<gc_wb_size<<std::endl;
+    std::cout<<"print_debug "<<print_debug<<std::endl;
 
     //Second load the PMem managers
     // Now load the first PMem managers
-    cout<<"PMEM0 is opened with ";
-    cout<<nThreadWrite<<" write and "<<nThreadRead<<" read."<<endl;
     main_file.close();
     pman0=new pmem_manager();
     if(new_old){
@@ -109,15 +117,12 @@ void DBImpl::load_pmem(bool new_old){
         std::cout<<"old DB"<<std::endl;
         pman0->open_pmem(nThreadWrite,false,dimm_dir0);
     }
+    cout<<"PMEM0 is opened with ";
+    cout<<nThreadWrite<<" write and "<<nThreadRead<<" read."<<endl;
     pman0->DBI=this;
 
-    std::cout<<"batchedBatch "<<batchedBatch<<std::endl;
-    std::cout<<"batchSize "<<batchSize<<std::endl;
-    std::cout<<"batchTimer "<<batchTimer<<std::endl;
-    std::cout<<"memory_buffer "<<memory_buffer<<std::endl;
 
     jt0=new job_threads();
-    jt0->init(nThreadWrite, nThreadRead, pman0);
     jt0->batchedBatch=batchedBatch;
     jt0->buffer_high_threshold=batchSize;
     jt0->timerus=batchTimer;
@@ -128,6 +133,7 @@ void DBImpl::load_pmem(bool new_old){
     jt0->gc_how_much=gc_how_much;
     jt0->gc_wb_size=gc_wb_size;
     jt0->print_debug=print_debug;
+    jt0->init(nThreadWrite, nThreadRead, pman0);
     std::cout<<"Loaded PMEM0 at"<<dimm_dir0<<std::endl;
 
     if(dual_writer){
@@ -145,7 +151,6 @@ void DBImpl::load_pmem(bool new_old){
 
         pman1->DBI=this;
         jt1=new job_threads();
-        jt1->init(nThreadWrite, nThreadRead, pman1);
         jt1->batchedBatch=batchedBatch;
         jt1->buffer_high_threshold=batchSize;
         jt1->timerus=batchTimer;
@@ -156,6 +161,7 @@ void DBImpl::load_pmem(bool new_old){
         jt1->gc_how_much=gc_how_much;
         jt1->gc_wb_size=gc_wb_size;
         jt1->print_debug=print_debug;
+        jt1->init(nThreadWrite, nThreadRead, pman1);
         std::cout<<"Loaded PMEM1 at"<<dimm_dir1<<std::endl;
 
     }

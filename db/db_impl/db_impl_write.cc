@@ -35,8 +35,9 @@ Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
   u_long insert_offset=js->offset;
   u_short* dimm=(u_short*)&(insert_offset);
   dimm[3]=js->dimm;
-  return Status::OK();
-  //return DB::Put(o, column_family, key, Slice((char*)(&(insert_offset)),8));
+  //return Status::OK();
+  delete(js);
+  return DB::Put(o, column_family, key, Slice((char*)(&(insert_offset)),8));
 
   // Use this if do not want to write to LSM.
   //return Status::OK();//Write(o, &batch);

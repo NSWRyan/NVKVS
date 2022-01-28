@@ -70,16 +70,14 @@ int pmem_manager::close_pmem() {
   offsets[2] = current_offset.offset_current;
   persist_fn(offsets + 3, 8 * 4);
 
-  if (print_debug) {
-    cout << pmem_dir << " Start pos" << endl;
-    cout << offsets[0] << endl;
-    cout << pmem_dir << " last GC pos" << endl;
-    cout << offsets[1] << endl;
-    cout << pmem_dir << " last write pos" << endl;
-    cout << offsets[2] << endl;
-    cout << pmem_dir << " max write" << endl;
-    cout << offsets[3] << endl;
-  }
+  cout << pmem_dir << " Start pos" << endl;
+  cout << offsets[0] << endl;
+  cout << pmem_dir << " last GC pos" << endl;
+  cout << offsets[1] << endl;
+  cout << pmem_dir << " last write pos" << endl;
+  cout << offsets[2] << endl;
+  cout << pmem_dir << " max write" << endl;
+  cout << offsets[3] << endl;
   pmem2_map_delete(&map);
   pmem2_source_delete(&src);
   pmem2_config_delete(&cfg);

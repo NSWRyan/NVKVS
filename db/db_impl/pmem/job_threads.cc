@@ -218,36 +218,38 @@ job_threads::~job_threads() {
 // otherwise the job will wait for a worker to finish processing its current
 // job.
 void job_threads::addWork_write(rocksdb::job_struct* job) {
-  MutexLock lock(mutex_w);
-  b_cond_w = true;
-  if (batchedBatch) {
-    // Insert into the buffer
-    // Overflow rotation
-    char* rotate=job->whole_data;
-    if ((this_pman->current_offset.offset_current + job->total_length) >=
-        this_pman->current_offset.offset_max) {
-      // Rotating, reset the cursor to start
-      this_pman->current_offset.offset_current =
+  char* rotate=job->whole_data;
+  rotate[job->total_length-1]=0;
+  {
+    MutexLock lock(mutex_w);
+    b_cond_w = true;
+    if (batchedBatch) {
+      // Insert into the buffer
+      // Overflow rotation
+      if ((this_pman->current_offset.offset_current + job->total_length) >=
+          this_pman->current_offset.offset_max) {
+        // Rotating, reset the cursor to start
+        this_pman->current_offset.offset_current =
           this_pman->current_offset.offset_start;
-          rotate[job->total_length-1]=1;
+        rotate[job->total_length-1]=1;
+      }
+      job->offset = this_pman->current_offset.offset_current;
+      this_pman->current_offset.offset_current += job->total_length;
+      workQueue_w[w_count] = job;
+      // current_buffer_size += job->total_length;
+      // w_count++;
+      // total_w_count++;
+    } else {
+      // Manual insertion by thread
+      // Very slow
+      this_pman->insertJS(job);
     }
-    job->offset = this_pman->current_offset.offset_current;
-    this_pman->current_offset.offset_current += job->total_length;
-    rotate[job->total_length-1]=0;
-    job->status = true;
-    workQueue_w[w_count] = job;
-    current_buffer_size += job->total_length;
-    w_count++;
-    total_w_count++;
-  } else {
-    // Manual insertion by thread
-    // Very slow
-    this_pman->insertJS(job);
+    b_cond_w = false;
   }
-  b_cond_w = false;
   if (throttle) {
-    // Sleep for 1000 ms when insert is too slow
-    job->throttle = true;
+    // Sleep for 1000 us when insert is too slow
+    for(int i =0; i< 10000;i++)
+      std::cout<<"";
   }
 }
 
@@ -279,9 +281,10 @@ void job_threads::addWork_read(job_pointer* job) {
 
 // This is the timer loop for write.
 void job_threads::timerStart_write() {
+  timer_alive=false;
   while (timer_alive) {
     usleep(timerus);
-    // Timer loc deprecated 0113
+    // Timer lock deprecated 0113
     // while (b_cond_w){
     //     cout<<"";
     // }
