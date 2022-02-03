@@ -133,7 +133,12 @@ job_threads::~job_threads() {
         std::cout << "Closing start" << std::endl;
     finished = true;
     while(timer_alive){
+        std::cout << timer_alive << std::endl;
         usleep(100);
+    }
+    {
+      void* result;
+      pthread_join(timer_thread, &result);
     }
     if(print_debug)
         std::cout << "Timer done" << std::endl;
@@ -148,10 +153,6 @@ job_threads::~job_threads() {
     //   cout << "";
     // }
 
-    {
-      void* result;
-      pthread_join(timer_thread, &result);
-    }
 
     //////////////////////////////////////////////////////////////////////////
     // Write part
@@ -162,7 +163,7 @@ job_threads::~job_threads() {
       // Send enough signals to free all threads.
       pthread_cond_signal(&cond_w);
     }
-
+    int ix=0;
     for (std::vector<pthread_t>::iterator loop = threads_write.begin();
          loop != threads_write.end(); ++loop) {
       // Wait for all threads to exit (they will as finished is true and
@@ -170,26 +171,22 @@ job_threads::~job_threads() {
       //                               they are running).
       void* result;
       pthread_join(*loop, &result);
+      cout<<"Thread "<<ix<<" joined."<<endl;
+      ix++;
     }
-    if(print_debug)
-        std::cout << "All threads done" << std::endl;
+    std::cout << "All threads done" << std::endl;
     // Destroy the pthread objects.
     pthread_cond_destroy(&cond_w);
+    std::cout << "cond_w done" << std::endl;
     pthread_mutex_destroy(&mutex_w);
+    std::cout << "mutex_w done" << std::endl;
     pthread_mutex_destroy(&mutex_w2);
-
-    // Delete all re-maining jobs.
-    // Notice how we took ownership of the jobs.
-    for (std::list<rocksdb::WriteBatch*>::const_iterator loop =
-             workQueue_w_batch.begin();
-         loop != workQueue_w_batch.end(); ++loop) {
-      delete *loop;
-    }
+    std::cout << "mutex_w2 done" << std::endl;
 
     //////////////////////////////////////////////////////////////////////////
-    // Read part
+    // Read part (unused)
     //////////////////////////////////////////////////////////////////////////
-    for (std::vector<pthread_t>::iterator loop = threads_read.begin();
+    /*for (std::vector<pthread_t>::iterator loop = threads_read.begin();
          loop != threads_read.end(); ++loop) {
       // Send enough signals to free all threads.
       pthread_cond_signal(&cond_r);
@@ -212,7 +209,7 @@ job_threads::~job_threads() {
          loop != workQueue_r.end(); ++loop) {
       delete *loop;
     }
-
+    */
     if(print_debug)
         cout << "total write " << total_write_count << endl;
     delete[](wtd);
@@ -291,76 +288,75 @@ void job_threads::timerStart_write() {
   int multiplier=100;
   int timer_count=0;
   while (!finished) {
-    usleep(timerus);
-    timer_count++;
-    free_space=freespace(this_pman->current_offset.offset_current,
-                      this_pman->current_offset.offset_gc,
-                      this_pman->current_offset.offset_max);
-    // Timer lock deprecated 0113
-    // while (b_cond_w){
-    //     cout<<"";
-    // }
+        usleep(timerus);
+        timer_count++;
+        free_space=freespace(this_pman->current_offset.offset_current,
+                        this_pman->current_offset.offset_gc,
+                        this_pman->current_offset.offset_max);
+        // Timer lock deprecated 0113
+        // while (b_cond_w){
+        //     cout<<"";
+        // }
 
-    // Always run the GC if this is true
-    if(manual_gc){
-        gc_run=true;
-    }
-    // Throttle write when buffer is full
-    if(timer_count>multiplier){
-        // std::cout<<"Timer waking up "<<wait_count<<std::endl;
-        // std::cout<<finished<<" "<<write_count<<std::endl;
-        // std::cout<<this_pman->pmem_dir<<std::endl;
-        // Find an empty batch to be filled
-        while(!find_empty_batch()&&!finished){
-            // No available worker so possible congestion
-            // Check GC first
-            if (current_buffer_size > buffer_high_threshold) {
-                // Check if max memory is over the limit
-                throttle = true;
-            }
-            for(int i=0;i<iThreadCount_write;i++){
-                if(!wtd[i].worker_status&&wtd[i].timer_status&&wait_count > 0){
-                    // Wake up the writer thread
-                    timer_lock = true;
-                    pthread_cond_signal(&cond_w);
-                }
-            }
-            usleep(timerus);
+        // Always run the GC if this is true
+        if(manual_gc){
+            gc_run=true;
         }
-        timer_count=0;
-    }
-
-    // Throttle release
-    if(!disable_GC){
-        if (free_space < gc_auto_trigger_percent) {
-                cout<<free_space<<endl;
-                // Free space reached the limit, run GC
-                // Trigger GC here.
-                gc_run=true;
-                if(free_space < gc_throttle){
+        // Throttle write when buffer is full
+        if(timer_count>multiplier){
+            // std::cout<<"Timer waking up "<<wait_count<<std::endl;
+            // std::cout<<finished<<" "<<write_count<<std::endl;
+            // std::cout<<this_pman->pmem_dir<<std::endl;
+            // Find an empty batch to be filled
+            while(!find_empty_batch()&&!finished){
+                // No available worker so possible congestion
+                // Check GC first
+                if (current_buffer_size > buffer_high_threshold) {
+                    // Check if max memory is over the limit
                     throttle = true;
                 }
+                for(int i=0;i<iThreadCount_write;i++){
+                    if(!wtd[i].worker_status&&wtd[i].timer_status&&wait_count > 0){
+                        // Wake up the writer thread
+                        timer_lock = true;
+                        pthread_cond_signal(&cond_w);
+                    }
+                }
+                usleep(timerus);
+            }
+            timer_count=0;
         }
-        if(free_space > gc_throttle){
+
+        // Throttle release
+        if(!disable_GC){
+            if (free_space < gc_auto_trigger_percent) {
+                    // Free space reached the limit, run GC
+                    // Trigger GC here.
+                    gc_run=true;
+                    if(free_space < gc_throttle){
+                        throttle = true;
+                    }
+            }
+            if(free_space > gc_throttle){
+                if (current_buffer_size < buffer_low_threshold) {
+                    // Release the throttle if the memory is back to normal
+                    throttle = false;
+                }
+            }
+        }else{
             if (current_buffer_size < buffer_low_threshold) {
                 // Release the throttle if the memory is back to normal
                 throttle = false;
             }
         }
-    }else{
-        if (current_buffer_size < buffer_low_threshold) {
-            // Release the throttle if the memory is back to normal
-            throttle = false;
+    }
+    if (write_count > 0) {
+        // Find an empty batch to be filled
+        while(!find_empty_batch()){
+            usleep(timerus);
         }
     }
     timer_alive=false;
-  }
-  if (write_count > 0) {
-    // Find an empty batch to be filled
-    while(!find_empty_batch()){
-        usleep(timerus);
-    }
-  }
     cout<<this_pman->pmem_dir<<" Timer done."<<endl; 
 }
 
