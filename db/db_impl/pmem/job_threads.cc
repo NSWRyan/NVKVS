@@ -163,17 +163,6 @@ job_threads::~job_threads() {
       pthread_cond_signal(&cond_w);
     }
 
-    for(int i=0;i<iThreadCount_write;i++){
-      while (!wtd[i].status) {
-        // Wait till job is done
-        usleep(100);
-      }
-    }
-
-    if(print_debug)
-        std::cout << "All threads done" << std::endl;
-
-
     for (std::vector<pthread_t>::iterator loop = threads_write.begin();
          loop != threads_write.end(); ++loop) {
       // Wait for all threads to exit (they will as finished is true and
@@ -182,6 +171,8 @@ job_threads::~job_threads() {
       void* result;
       pthread_join(*loop, &result);
     }
+    if(print_debug)
+        std::cout << "All threads done" << std::endl;
     // Destroy the pthread objects.
     pthread_cond_destroy(&cond_w);
     pthread_mutex_destroy(&mutex_w);
@@ -320,7 +311,7 @@ void job_threads::timerStart_write() {
         // std::cout<<finished<<" "<<write_count<<std::endl;
         // std::cout<<this_pman->pmem_dir<<std::endl;
         // Find an empty batch to be filled
-        while(!find_empty_batch()){
+        while(!find_empty_batch()&&!finished){
             // No available worker so possible congestion
             // Check GC first
             if (current_buffer_size > buffer_high_threshold) {
@@ -337,7 +328,6 @@ void job_threads::timerStart_write() {
             usleep(timerus);
         }
         timer_count=0;
-        
     }
 
     // Throttle release
