@@ -133,7 +133,7 @@ job_threads::~job_threads() {
         std::cout << "Closing start" << std::endl;
     finished = true;
     while(timer_alive){
-      std::cout<<"";
+        usleep(100);
     }
     if(print_debug)
         std::cout << "Timer done" << std::endl;
@@ -157,18 +157,22 @@ job_threads::~job_threads() {
     // Write part
     //////////////////////////////////////////////////////////////////////////
 
-    
     for (std::vector<pthread_t>::iterator loop = threads_write.begin();
          loop != threads_write.end(); ++loop) {
       // Send enough signals to free all threads.
       pthread_cond_signal(&cond_w);
-    }    
+    }
+
     for(int i=0;i<iThreadCount_write;i++){
       while (!wtd[i].status) {
         // Wait till job is done
-        cout << "";
+        usleep(100);
       }
     }
+
+    if(print_debug)
+        std::cout << "All threads done" << std::endl;
+
 
     for (std::vector<pthread_t>::iterator loop = threads_write.begin();
          loop != threads_write.end(); ++loop) {
@@ -219,7 +223,7 @@ job_threads::~job_threads() {
     }
 
     if(print_debug)
-        cout << "total write " << total_w_count << endl;
+        cout << "total write " << total_write_count << endl;
     delete[](wtd);
     delete (workQueue_w);
     initiated = false;
@@ -248,10 +252,10 @@ void job_threads::addWork_write(rocksdb::job_struct* job) {
       }
       job->offset = this_pman->current_offset.offset_current;
       this_pman->current_offset.offset_current += job->total_length;
-      workQueue_w[w_count] = job;
+      workQueue_w[write_count] = job;
       current_buffer_size += job->total_length;
-      w_count++;
-      total_w_count++;
+      write_count++;
+      total_write_count++;
     } else {
       // Manual insertion by thread
       // Very slow
@@ -261,7 +265,7 @@ void job_threads::addWork_write(rocksdb::job_struct* job) {
   }
   if (throttle) {
     // Do something for some time when insert is too slow
-    for(int i =0; i< 10000;i++){std::cout<<"";}
+     for(int i =0; i< 100;i++){std::cout<<"";}
   }
 }
 
@@ -275,11 +279,11 @@ void job_threads::addWork_write_batch(rocksdb::WriteBatch* job, u_short dimm) {
   for (rocksdb::job_struct* job_j : job->writebatch_data) {
     job_j->offset = this_pman->current_offset.offset_current;
     this_pman->current_offset.offset_current += job_j->total_length;
-    workQueue_w[w_count] = job_j;
+    workQueue_w[write_count] = job_j;
     current_buffer_size += job->total_write;
     job_j->dimm = dimm;
-    w_count++;
-    total_w_count++;
+    write_count++;
+    total_write_count++;
   }
   b_cond_w = false;
 }
@@ -294,9 +298,13 @@ void job_threads::addWork_read(job_pointer* job) {
 // This is the timer loop for write.
 void job_threads::timerStart_write() {
   int multiplier=100;
-  int t_count=0;
+  int timer_count=0;
   while (!finished) {
     usleep(timerus);
+    timer_count++;
+    free_space=freespace(this_pman->current_offset.offset_current,
+                      this_pman->current_offset.offset_gc,
+                      this_pman->current_offset.offset_max);
     // Timer lock deprecated 0113
     // while (b_cond_w){
     //     cout<<"";
@@ -307,47 +315,49 @@ void job_threads::timerStart_write() {
         gc_run=true;
     }
     // Throttle write when buffer is full
-    t_count++;
-    if(t_count>multiplier){
-      // std::cout<<"Timer waking up "<<wait_count<<std::endl;
-      // std::cout<<finished<<" "<<w_count<<std::endl;
-      // std::cout<<this_pman->pmem_dir<<std::endl;
-      if (wait_count > 0) {
-        // Some workers are idle, so wake them up
+    if(timer_count>multiplier){
+        // std::cout<<"Timer waking up "<<wait_count<<std::endl;
+        // std::cout<<finished<<" "<<write_count<<std::endl;
+        // std::cout<<this_pman->pmem_dir<<std::endl;
         // Find an empty batch to be filled
-          if(find_empty_batch())t_count=0;
-      } else {
-          // No available worker so possible congestion
-          // Check GC first
-          free_space=freespace(this_pman->current_offset.offset_current,
-                      this_pman->current_offset.offset_gc,
-                      this_pman->current_offset.offset_max);
-          if (free_space < gc_auto_trigger_percent) {
-              // Free space reached the limit, run GC
-              // Trigger GC here.
-              gc_run=true;
-              if(free_space < gc_throttle){
-                  throttle = true;
-              }
-          }
-
-          if (current_buffer_size > buffer_high_threshold) {
-              // Check if max memory is over the limit
-              throttle = true;
-          }
-      }
-    }else{
-      for(int i=0;i<iThreadCount_write;i++){
-        if(!wtd[i].worker_status&&wtd[i].timer_status&&wait_count > 0){
-            // Wake up the writer thread
-            timer_lock = true;
-            pthread_cond_signal(&cond_w);
+        while(!find_empty_batch()){
+            // No available worker so possible congestion
+            // Check GC first
+            if (current_buffer_size > buffer_high_threshold) {
+                // Check if max memory is over the limit
+                throttle = true;
+            }
+            for(int i=0;i<iThreadCount_write;i++){
+                if(!wtd[i].worker_status&&wtd[i].timer_status&&wait_count > 0){
+                    // Wake up the writer thread
+                    timer_lock = true;
+                    pthread_cond_signal(&cond_w);
+                }
+            }
+            usleep(timerus);
         }
-      }
+        timer_count=0;
+        
     }
 
     // Throttle release
-    if(free_space > gc_throttle){
+    if(!disable_GC){
+        if (free_space < gc_auto_trigger_percent) {
+                cout<<free_space<<endl;
+                // Free space reached the limit, run GC
+                // Trigger GC here.
+                gc_run=true;
+                if(free_space < gc_throttle){
+                    throttle = true;
+                }
+        }
+        if(free_space > gc_throttle){
+            if (current_buffer_size < buffer_low_threshold) {
+                // Release the throttle if the memory is back to normal
+                throttle = false;
+            }
+        }
+    }else{
         if (current_buffer_size < buffer_low_threshold) {
             // Release the throttle if the memory is back to normal
             throttle = false;
@@ -355,16 +365,15 @@ void job_threads::timerStart_write() {
     }
     timer_alive=false;
   }
-  if (w_count > 0) {
-    while(wait_count==0){
-      std::cout<<"";
-    }
+  if (write_count > 0) {
     // Find an empty batch to be filled
-    find_empty_batch();
+    while(!find_empty_batch()){
+        usleep(timerus);
+    }
   }
-  if(print_debug)
-      cout<<this_pman->pmem_dir<<" Timer done."<<endl; 
+    cout<<this_pman->pmem_dir<<" Timer done."<<endl; 
 }
+
 bool job_threads::find_empty_batch(){
   for(int i=0;i<iThreadCount_write;i++){
       if(!wtd[i].timer_status){
@@ -373,16 +382,16 @@ bool job_threads::find_empty_batch(){
         {
           // Lock client threads
           MutexLock lock(mutex_w2);
-          if(w_count > 0){
+          if(write_count > 0){
             // Swap the client batch with this batch
             temp = workQueue_w;
             workQueue_w = wtd[i].buffer;
             wtd[i].buffer = temp;
-            wtd[i].n_jobs = w_count;
+            wtd[i].n_jobs = write_count;
             wtd[i].total_write_byte = current_buffer_size;
             // Reset the writes on the client side
             current_buffer_size = 0;
-            w_count = 0;
+            write_count = 0;
             filled=true;
           }
         }
@@ -402,7 +411,9 @@ bool job_threads::find_empty_batch(){
 // The GC threads
 void job_threads::workerStart_gc() {
     while(!finished){
-        usleep(timerus);
+        usleep(timerus*100);
+        if(disable_GC)
+            return;
         if(gc_run){
             std::cout<<"GC online."<<std::endl;
             // GC job here
@@ -631,7 +642,7 @@ u_short job_threads::getJob_w() {
   }  // Lock region end
   // Fill in the batch job total size in bytes.
   // Old and inefficient because it needs to iterate everything. 0111
-  // for(int i=0;i<t_w_count;i++){
+  // for(int i=0;i<t_write_count;i++){
   //     // Insert into the batch_job
   //     result->buffer[i]=wtd[thread_id].buffer[i];
   //     // Only for insertion to LSM tree in the writer thread
@@ -681,7 +692,7 @@ int job_threads::freespace(u_long cur, u_long gc, u_long max) {
     return (gc - cur) * 100 / max;
   }
   // Case when write catch up to GC, rare
-  if (gc == cur && gc != 0) {
+  if (gc == cur && gc != this_pman->current_offset.offset_start) {
     return 0;
   }
   // Other cases

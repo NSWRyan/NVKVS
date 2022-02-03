@@ -38,6 +38,7 @@ void DBImpl::load_pmem(bool new_old){
     // GC write batch size
     int gc_wb_size=200;
     bool print_debug=false;
+    bool disable_GC=false;
 
     ifstream main_file("/home/ryan/RyanProject1/rdbshared/config");
     string conf_input;
@@ -94,6 +95,11 @@ void DBImpl::load_pmem(bool new_old){
         if(stoi(conf_input)==1){
             print_debug=true;
         }
+
+        getline(main_file,conf_input); 
+        if(stoi(conf_input)==1){
+            disable_GC=true;
+        }
     }
     std::cout<<"batchedBatch "<<batchedBatch<<std::endl;
     std::cout<<"batchSize "<<batchSize<<std::endl;
@@ -105,6 +111,7 @@ void DBImpl::load_pmem(bool new_old){
     std::cout<<"gc_how_much "<<gc_how_much<<std::endl;
     std::cout<<"gc_wb_size "<<gc_wb_size<<std::endl;
     std::cout<<"print_debug "<<print_debug<<std::endl;
+    std::cout<<"disable_GC "<<disable_GC<<std::endl;
 
     //Second load the PMem managers
     // Now load the first PMem managers
@@ -133,6 +140,7 @@ void DBImpl::load_pmem(bool new_old){
     jt0->gc_how_much=gc_how_much;
     jt0->gc_wb_size=gc_wb_size;
     jt0->print_debug=print_debug;
+    jt0->disable_GC=disable_GC;
     jt0->init(nThreadWrite, nThreadRead, pman0);
     std::cout<<"Loaded PMEM0 at"<<dimm_dir0<<std::endl;
 
@@ -161,6 +169,7 @@ void DBImpl::load_pmem(bool new_old){
         jt1->gc_how_much=gc_how_much;
         jt1->gc_wb_size=gc_wb_size;
         jt1->print_debug=print_debug;
+        jt1->disable_GC=disable_GC;
         jt1->init(nThreadWrite, nThreadRead, pman1);
         std::cout<<"Loaded PMEM1 at"<<dimm_dir1<<std::endl;
 

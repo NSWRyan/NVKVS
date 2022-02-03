@@ -149,9 +149,9 @@ class job_threads
         // us the thread need to wait before continue.
         int slow_down=0;
         // The number of kv in the current buffer.
-        int w_count=0;
+        int write_count=0;
         // The totak kv in this session.
-        int total_w_count=0;
+        int total_write_count=0;
         // Write lock, the simple one as a guarantee if mutex failed.
         bool b_cond_w=true;
         // Write lock, the simple one as a guarantee if mutex failed.
@@ -190,6 +190,7 @@ class job_threads
         // The current free_space of the pmem
         int free_space=100;
         bool print_debug=true;
+        bool disable_GC=false;
 
     private:
         friend void* job_threads_Start(void*);
