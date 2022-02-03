@@ -133,7 +133,6 @@ job_threads::~job_threads() {
         std::cout << "Closing start" << std::endl;
     finished = true;
     while(timer_alive){
-        std::cout << timer_alive << std::endl;
         usleep(100);
     }
     {
@@ -171,17 +170,14 @@ job_threads::~job_threads() {
       //                               they are running).
       void* result;
       pthread_join(*loop, &result);
-      cout<<"Thread "<<ix<<" joined."<<endl;
       ix++;
     }
-    std::cout << "All threads done" << std::endl;
+    if(print_debug)
+        std::cout << "All threads done" << std::endl;
     // Destroy the pthread objects.
     pthread_cond_destroy(&cond_w);
-    std::cout << "cond_w done" << std::endl;
     pthread_mutex_destroy(&mutex_w);
-    std::cout << "mutex_w done" << std::endl;
     pthread_mutex_destroy(&mutex_w2);
-    std::cout << "mutex_w2 done" << std::endl;
 
     //////////////////////////////////////////////////////////////////////////
     // Read part (unused)
